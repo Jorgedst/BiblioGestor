@@ -1,7 +1,9 @@
 import flet as ft
 
+def commonSideBar(page: ft.Page):
+    async def ir_inicio(e):
+        await page.push_route("/")
 
-def commonSideBar():
     return ft.Container(
         width=230,
         height=670,
@@ -37,6 +39,7 @@ def commonSideBar():
                     ft.Button(
                         width=190,
                         content="Inicio",
+                        on_click = ir_inicio,
                         style=ft.ButtonStyle(
                             color={
                                 ft.ControlState.DEFAULT: ft.Colors.BLACK,
