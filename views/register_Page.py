@@ -93,12 +93,26 @@ def register_Page(page: ft.Page):
     )
 
     async def ir_dashBoardUsuario(e):
-        if (not txtFieldId.value or not txtFieldNombre.value or not txtFieldApellido.value or not txtFieldCorreo.value):
+        if (not txtFieldId.value ):
+            txtFieldId.error = "Ingresa un ID"
+            return
+        if (not txtFieldNombre.value):
+            txtFieldNombre.error = "Ingresa un nombre"
+            return
+        if (not txtFieldApellido.value):
+            txtFieldApellido.error = "Ingresa un apellido"
+            return
+        if (not txtFieldCorreo.value):
+            txtFieldCorreo.error = "Ingresa un correo"
             return
         existe, data = validarUserIdentificacion(txtFieldId.value)
         if existe:
             return
         else:
+            nombre_usuarioSesion = txtFieldNombre.value
+            apellido_usuarioSesion = txtFieldApellido.value
+            page.session.store.set("nombre_usuario", nombre_usuarioSesion)
+            page.session.store.set("apellido_usuario", apellido_usuarioSesion)
             registrar_Usuario(codigoSesionUsuario,txtFieldId.value,txtFieldNombre.value,txtFieldApellido.value,txtFieldCorreo.value,switchEstudiante.value,True,dropDownCarrera.value)
             await page.push_route("/userDashboard")
     return ft.View(

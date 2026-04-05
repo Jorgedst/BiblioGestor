@@ -1,9 +1,9 @@
 import flet as ft
-
+from views.reusable.btnSalir import btnSalir
 
 def userSideBar(page: ft.Page):
     async def ir_inicio(e):
-        await page.push_route("/")
+        await page.push_route("/userDashboard")
 
     return ft.Container(
         width=230,
@@ -11,7 +11,7 @@ def userSideBar(page: ft.Page):
         content=ft.Column(controls=[
             ft.Container(
                 content=ft.Text(
-                    "BiblioGestor",
+                    value = "BiblioGestor",
                     size=25,
                     color=ft.Colors.BLACK,
                     weight=ft.FontWeight.BOLD,
@@ -175,6 +175,14 @@ def userSideBar(page: ft.Page):
                     ),
 
                 ])
+            ),
+            #Boton de salir
+            ft.Container(
+                margin = ft.Margin(0,220,0,0),
+                content= ft.Row(
+                    alignment= ft.MainAxisAlignment.START,
+                    controls= [
+                        btnSalir(page)]),
             )
         ]
         )

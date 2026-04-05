@@ -1,5 +1,4 @@
 import flet as ft
-
 def commonSideBar(page: ft.Page):
     async def ir_inicio(e):
         await page.push_route("/")
@@ -55,7 +54,7 @@ def commonSideBar(page: ft.Page):
                         )
                     )
                 ])
-            )
+            ),
         ]
         )
     )

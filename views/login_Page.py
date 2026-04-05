@@ -24,14 +24,15 @@ def login_page(page: ft.Page):
     async def ir_register(e):
         codigo = txtFieldCodigoUsuario.value
         if not codigo:
-            return
-        existe, data = validarUserCodigo(codigo)
-        page.session.store.set("codigo_usuario", codigo)
-        if existe:
-            await page.push_route("/userDashboard")
+            txtFieldCodigoUsuario.error = "Ingresa un codigo"
             return
         else:
-            await page.push_route("/register")
+            existe, data = validarUserCodigo(codigo)
+            page.session.store.set("codigo_usuario", codigo)
+            if existe:
+                await page.push_route("/userDashboard")
+            else:
+                await page.push_route("/register")
 
     return ft.View(
         route="/",
