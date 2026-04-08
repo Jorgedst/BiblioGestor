@@ -1,6 +1,7 @@
 import flet as ft
 from views.reusable.commonSideBar import commonSideBar
 from views.reusable.soyAdminBtn import soyAdminBtn
+from views.reusable.dropDownCarrera import getOptionsDropDown
 from database.queries import validarUserIdentificacion
 from database.queries import registrar_Usuario
 
@@ -37,7 +38,6 @@ def register_Page(page: ft.Page):
         color=ft.Colors.BLACK,
         border_color=ft.Colors.GREY_400,
         border_radius=10,
-        input_filter=ft.TextOnlyInputFilter(),
     )
     # Apellido
     txtFieldApellido = ft.TextField(
@@ -51,7 +51,6 @@ def register_Page(page: ft.Page):
         color=ft.Colors.BLACK,
         border_color=ft.Colors.GREY_400,
         border_radius=10,
-        input_filter=ft.TextOnlyInputFilter(),
     )
     # Correo
     txtFieldCorreo = ft.TextField(
@@ -72,28 +71,18 @@ def register_Page(page: ft.Page):
         active_track_color=ft.Colors.BLACK,)
     # Carreera
     dropDownCarrera = ft.Dropdown(
-        margin=ft.Margin(
-            30, 0, 0, 0),
-        width=220,
-        bgcolor=ft.Colors.GREY_900,
-        border_color=ft.Colors.GREY_400,
-        color=ft.Colors.GREY_900,
-        label="Carrera (Opcional)",
-        menu_height=300,
-        options=[
-            ft.DropdownOption(
-                key="INGSIST", text="Ingeniería de sistemas"),
-            ft.DropdownOption(
-                key="INGINDUST", text="Ingeniería industrial"),
-            ft.DropdownOption(
-                key="INGELECTRON", text="Ingeniería electronica"),
-            ft.DropdownOption(
-                key="INGELECT", text="Ingenieria electrica"),
-        ]
-    )
+            options= getOptionsDropDown(),
+            margin=ft.Margin(
+                30, 0, 0, 0),
+            width=220,
+            bgcolor=ft.Colors.GREY_900,
+            border_color=ft.Colors.GREY_400,
+            color=ft.Colors.GREY_900,
+            label="Carrera (Opcional)",
+            menu_height=300,)
 
     async def ir_dashBoardUsuario(e):
-        if (not txtFieldId.value ):
+        if (not txtFieldId.value):
             txtFieldId.error = "Ingresa un ID"
             return
         if (not txtFieldNombre.value):
@@ -109,12 +98,15 @@ def register_Page(page: ft.Page):
         if existe:
             return
         else:
-            nombre_usuarioSesion = txtFieldNombre.value
-            apellido_usuarioSesion = txtFieldApellido.value
-            page.session.store.set("nombre_usuario", nombre_usuarioSesion)
-            page.session.store.set("apellido_usuario", apellido_usuarioSesion)
-            registrar_Usuario(codigoSesionUsuario,txtFieldId.value,txtFieldNombre.value,txtFieldApellido.value,txtFieldCorreo.value,switchEstudiante.value,True,dropDownCarrera.value)
+            registrar_Usuario(codigoSesionUsuario, txtFieldId.value, txtFieldNombre.value, txtFieldApellido.value,
+                              txtFieldCorreo.value, switchEstudiante.value, True, dropDownCarrera.value)
             await page.push_route("/userDashboard")
+
+    # Enter en cualquier campo = click en Enviar
+    txtFieldId.on_submit = ir_dashBoardUsuario
+    txtFieldNombre.on_submit = ir_dashBoardUsuario
+    txtFieldApellido.on_submit = ir_dashBoardUsuario
+    txtFieldCorreo.on_submit = ir_dashBoardUsuario
     return ft.View(
         route="/register",
         spacing=0,
@@ -154,7 +146,7 @@ def register_Page(page: ft.Page):
                                                     value="Completa la información necesaria",
                                                     size=20,
                                                     weight=ft.FontWeight.W_400,
-                                                    color=ft.Colors.GREY_900,
+                                                    color=ft.Colors.LIGHT_GREEN_600,
                                                 )
 
                                             ]
@@ -179,7 +171,7 @@ def register_Page(page: ft.Page):
                                                     border_radius=10,
                                                 ),
                                                 ft.Text(
-                                                    value="Identificación",
+                                                    value="Identificación (Cédula)",
                                                     weight=ft.FontWeight.W_400,
                                                     color=ft.Colors.GREY_900,
                                                 ),
@@ -247,7 +239,7 @@ def register_Page(page: ft.Page):
                                         height=40,
                                         alignment=ft.Alignment.CENTER,
                                         content=ft.Button(
-                                            on_click = ir_dashBoardUsuario,
+                                            on_click=ir_dashBoardUsuario,
                                             width=250,
                                             content="Enviar",
                                             color=ft.Colors.WHITE,

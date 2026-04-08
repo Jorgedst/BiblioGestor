@@ -47,11 +47,11 @@ def validarUserIdentificacion(id):
     else:
         return False, data
 
-def obtenerNombreUsuario(id):
-    query = "SELECT nombre FROM usuarios WHERE codigo = %s"
+def obtenerUsuarioInfo(id):
+    query = "SELECT * FROM usuarios WHERE codigo = %s"
     success, data = fetch_query(query, (id,))
     if success and data:
-        return data[0][0]
+        return data
     else:
         return None
 

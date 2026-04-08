@@ -1,10 +1,13 @@
 import flet as ft
 
 def soyAdminBtn(page: ft.Page):
-
+    async def irLoginAdmin(e):
+        await page.push_route("/loginAdmin")
+        
     return ft.Container(
         alignment=ft.Alignment.TOP_RIGHT,
         content=ft.Button(
+            on_click= irLoginAdmin,
             width=150,
             margin=ft.Margin(0, 10, 0, 0),
             content="Soy Administrador",

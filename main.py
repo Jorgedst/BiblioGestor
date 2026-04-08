@@ -1,7 +1,10 @@
 import flet as ft
 from views.login_Page import login_page
 from views.register_Page import register_Page
-from views.userDashboard_Page import dashBoardPage
+from views.user.userDashboard_Page import dashBoardPage
+from views.admin.loginAdmin import loginAdmin
+from views.admin.dashboardAdmin import dashBoardAdmin
+
 
 def main(page: ft.Page):
     page.window.title = "BiblioGestor"
@@ -23,11 +26,15 @@ def main(page: ft.Page):
             page.views.append(register_Page(page))
         elif page.route == "/userDashboard":
             page.views.append(dashBoardPage(page))
+        elif page.route == "/loginAdmin":
+            page.views.append(loginAdmin(page))
+        elif page.route == "/dashboardAdmin":
+            page.views.append(dashBoardAdmin(page))
 
         page.update()
     page.on_route_change = route_change
-    #Pa probal
-    #page.route = "/register"
+    # Pa probal
+    # page.route = "/register"
     route_change(None)
 
 

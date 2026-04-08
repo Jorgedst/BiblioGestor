@@ -2,7 +2,8 @@ import flet as ft
 
 
 def botonesCategoria(texto: str):
-    return ft.Button(
+            
+    btn= ft.Button(
         width=105,
         content=ft.Text(
             value= texto,
@@ -23,3 +24,4 @@ def botonesCategoria(texto: str):
                 radius=10),
         ),
     )
+    return btn

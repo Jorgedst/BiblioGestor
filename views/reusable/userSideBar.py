@@ -1,9 +1,35 @@
 import flet as ft
 from views.reusable.btnSalir import btnSalir
 
-def userSideBar(page: ft.Page):
+def userSideBar(
+    page: ft.Page,
+    on_inicio=None,
+    on_devolver_libro=None,
+    on_historial=None,
+    on_editar_perfil=None,
+):
     async def ir_inicio(e):
-        await page.push_route("/userDashboard")
+        if on_inicio is not None:
+            await on_inicio(e)
+        else:
+            await page.push_route("/userDashboard")
+
+    async def irDevolucionLibro(e):
+        if on_devolver_libro is not None:
+            await on_devolver_libro(e)
+        else:
+            await page.push_route("/devolverLibro")
+
+    async def irHistorial(e):
+        if on_historial is not None:
+            await on_historial(e)
+        else:
+            await page.push_route("/historial")
+    async def irEditarPerfil(e):
+        if on_editar_perfil is not None:
+            await on_editar_perfil(e)
+        else:
+            await page.push_route("/editarPerfil")
 
     return ft.Container(
         width=230,
@@ -79,7 +105,7 @@ def userSideBar(page: ft.Page):
                     ft.Button(
                         width=190,
                         content="Devolver un libro",
-                        # on_click = ir_inicio,
+                        on_click = irDevolucionLibro,
                         style=ft.ButtonStyle(
                             color={
                                 ft.ControlState.DEFAULT: ft.Colors.BLACK,
@@ -118,7 +144,7 @@ def userSideBar(page: ft.Page):
                     ft.Button(
                         width=190,
                         content="Historial",
-                        # on_click=ir_inicio,
+                        on_click=irHistorial,
                         style=ft.ButtonStyle(
                             color={
                                 ft.ControlState.DEFAULT: ft.Colors.BLACK,
@@ -158,7 +184,7 @@ def userSideBar(page: ft.Page):
                     ft.Button(
                         width=190,
                         content="Editar perfil",
-                        # on_click=ir_inicio,
+                        on_click=irEditarPerfil,
                         style=ft.ButtonStyle(
                             color={
                                 ft.ControlState.DEFAULT: ft.Colors.BLACK,

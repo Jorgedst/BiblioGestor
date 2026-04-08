@@ -5,10 +5,25 @@ from database.queries import validarUserCodigo
 
 
 def login_page(page: ft.Page):
+
+    async def ir_register(e):
+        codigo = txtFieldCodigoUsuario.value
+        if not codigo:
+            txtFieldCodigoUsuario.error = "Ingresa un codigo"
+            return
+        else:
+            existe, data = validarUserCodigo(codigo)
+            # PRUEBAS CAMBIAR DESPUES OOJOOOOOOO
+            page.session.store.set("codigo_usuario", codigo)
+            if existe:
+                await page.push_route("/userDashboard")
+            else:
+                await page.push_route("/register")
+                
     txtFieldCodigoUsuario = ft.TextField(
         height=58,
         autofocus=True,
-        max_length=10,
+        max_length=9,
         label_style=ft.TextStyle(
             size=14,
             weight=ft.FontWeight.W_400,
@@ -18,21 +33,9 @@ def login_page(page: ft.Page):
         color=ft.Colors.BLACK,
         border_color=ft.Colors.GREY_400,
         border_radius=10,
-        input_filter=ft.NumbersOnlyInputFilter()
+        input_filter=ft.NumbersOnlyInputFilter(),
+        on_submit=ir_register,
     )
-
-    async def ir_register(e):
-        codigo = txtFieldCodigoUsuario.value
-        if not codigo:
-            txtFieldCodigoUsuario.error = "Ingresa un codigo"
-            return
-        else:
-            existe, data = validarUserCodigo(codigo)
-            page.session.store.set("codigo_usuario", codigo)
-            if existe:
-                await page.push_route("/userDashboard")
-            else:
-                await page.push_route("/register")
 
     return ft.View(
         route="/",
@@ -64,10 +67,32 @@ def login_page(page: ft.Page):
                                         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                                         controls=[
                                             ft.Text(
-                                                value="¡Bienvenido a BiblioGestor!",
-                                                size=40,
-                                                weight=ft.FontWeight.BOLD,
-                                                color=ft.Colors.GREY_900,
+                                                spans=[
+                                                    ft.TextSpan(
+                                                        text="¡Bienvenido a ",
+                                                        style=ft.TextStyle(
+                                                            size=40,
+                                                            weight=ft.FontWeight.BOLD,
+                                                            color=ft.Colors.GREY_900,
+                                                        ),
+                                                    ),
+                                                    ft.TextSpan(
+                                                        text="BiblioGestor",
+                                                        style=ft.TextStyle(
+                                                            size=40,
+                                                            weight=ft.FontWeight.BOLD,
+                                                            color=ft.Colors.LIGHT_GREEN_600,
+                                                        ),
+                                                    ),
+                                                    ft.TextSpan(
+                                                        text="!",
+                                                        style=ft.TextStyle(
+                                                            size=40,
+                                                            weight=ft.FontWeight.BOLD,
+                                                            color=ft.Colors.GREY_900,
+                                                        ),
+                                                    ),
+                                                ]
                                             ),
                                             ft.Text(
                                                 value="Ingresa tu codigo estudiantil",
@@ -106,14 +131,14 @@ def login_page(page: ft.Page):
                                                                     },
                                                                 bgcolor={
                                                                         ft.ControlState.DEFAULT: ft.Colors.GREY_900,
-                                                                },
+                                                                        },
                                                                 shape=ft.ContinuousRectangleBorder(
                                                                         radius=10),
                                                                 mouse_cursor=ft.MouseCursor.CLICK,
                                                                 shadow_color=ft.Colors.TRANSPARENT,
                                                                 text_style=ft.TextStyle(
                                                                         weight=ft.FontWeight.W_500
-                                                                )
+                                                                        )
                                                             )
                                                         )
                                                     ]
