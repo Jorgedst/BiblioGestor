@@ -1009,8 +1009,8 @@ def build_admin_libros(page: ft.Page) -> ft.Column:
 
 
 def build_admin_prestamos(page: ft.Page) -> ft.Column:
-    """Layout de préstamos: lista con datos reales + botón Denegar."""
-    from database.queries import obtenerPrestamosRecientes, denegarPrestamo, yaExisteDevolucion
+    """Layout de préstamos: lista con estados y botones Aprobar/Rechazar."""
+    from database.queries import obtenerPrestamosRecientes, aprobarPrestamo, rechazarPrestamo
     from views.reusable.succesful import open_succesful_dialog, open_confirm_dialog
 
     lista_prestamos_col = ft.Column(spacing=6, scroll=ft.ScrollMode.AUTO, tight=True)
@@ -1031,46 +1031,70 @@ def build_admin_prestamos(page: ft.Page) -> ft.Column:
 
         for p in prestamos:
             # p: (idPrestamo, codigoUsuario, nombreUsuario, ejemplar, titulo,
-            #     fechaPrestamo, fechaVencimiento)
+            #     fechaPrestamo, fechaVencimiento, estadoPrestamo)
             id_prest = p[0]
             nombre_u = p[2]
             ejemplar = p[3]
             titulo = p[4]
             fecha_p = p[5].strftime("%d/%m/%Y") if hasattr(p[5], "strftime") else str(p[5])
             fecha_v = p[6].strftime("%d/%m/%Y") if hasattr(p[6], "strftime") else str(p[6])
-
-            devuelto = yaExisteDevolucion(id_prest)
+            estado = p[7] if len(p) > 7 else "Aprobada"
 
             # Badge de estado
-            if devuelto:
-                badge_color = ft.Colors.BLUE_600
-                badge_text = "Devuelto"
-            else:
-                badge_color = ft.Colors.GREEN_600
-                badge_text = "Activo"
+            badge_colors = {
+                "En solicitud": ft.Colors.AMBER_700,
+                "Aprobada": ft.Colors.GREEN_600,
+                "Rechazada": ft.Colors.RED_600,
+            }
+            badge_color = badge_colors.get(estado, ft.Colors.GREY_600)
 
             botones_accion = []
-            if not devuelto:
-                def _make_denegar(ip):
+            if estado == "En solicitud":
+                def _make_aprobar(ip):
                     def _h(e):
                         open_confirm_dialog(
                             page,
-                            titulo="Denegar préstamo",
-                            mensaje=f"¿Denegar el préstamo #{ip}?\nEl ejemplar será liberado.",
-                            on_confirm=lambda ev, _ip=ip: _do_denegar(_ip),
+                            titulo="Aprobar préstamo",
+                            mensaje=f"¿Aprobar el préstamo #{ip}?",
+                            on_confirm=lambda ev, _ip=ip: _do_aprobar(_ip),
                         )
                     return _h
 
-                def _do_denegar(ip):
-                    ok, _ = denegarPrestamo(ip)
+                def _make_rechazar(ip):
+                    def _h(e):
+                        open_confirm_dialog(
+                            page,
+                            titulo="Rechazar préstamo",
+                            mensaje=f"¿Rechazar el préstamo #{ip}?\nEl ejemplar será liberado.",
+                            on_confirm=lambda ev, _ip=ip: _do_rechazar(_ip),
+                        )
+                    return _h
+
+                def _do_aprobar(ip):
+                    ok, _ = aprobarPrestamo(ip)
                     if ok:
                         _refrescar()
-                        open_succesful_dialog(page, f"Préstamo #{ip} denegado. El ejemplar fue liberado.")
+                        open_succesful_dialog(page, f"Préstamo #{ip} aprobado.")
+
+                def _do_rechazar(ip):
+                    ok, _ = rechazarPrestamo(ip)
+                    if ok:
+                        _refrescar()
+                        open_succesful_dialog(page, f"Préstamo #{ip} rechazado. El ejemplar fue liberado.")
 
                 botones_accion = [
                     ft.FilledButton(
-                        content="Denegar", width=110, height=32,
-                        on_click=_make_denegar(id_prest),
+                        content="Aprobar", width=100, height=32,
+                        on_click=_make_aprobar(id_prest),
+                        style=ft.ButtonStyle(
+                            bgcolor=ft.Colors.GREEN_600, color=ft.Colors.WHITE,
+                            shape=ft.RoundedRectangleBorder(radius=8),
+                            text_style=ft.TextStyle(size=12, weight=ft.FontWeight.W_600),
+                        ),
+                    ),
+                    ft.FilledButton(
+                        content="Rechazar", width=100, height=32,
+                        on_click=_make_rechazar(id_prest),
                         style=ft.ButtonStyle(
                             bgcolor=ft.Colors.RED_600, color=ft.Colors.WHITE,
                             shape=ft.RoundedRectangleBorder(radius=8),
@@ -1100,7 +1124,7 @@ def build_admin_prestamos(page: ft.Page) -> ft.Column:
                                             padding=ft.Padding(8, 2, 8, 2),
                                             border_radius=4,
                                             bgcolor=badge_color,
-                                            content=ft.Text(badge_text, size=10, weight=ft.FontWeight.W_600,
+                                            content=ft.Text(estado, size=10, weight=ft.FontWeight.W_600,
                                                             color=ft.Colors.WHITE),
                                         ),
                                     ],
@@ -1175,10 +1199,226 @@ def build_admin_prestamos(page: ft.Page) -> ft.Column:
 
 
 def build_admin_devoluciones(page: ft.Page) -> ft.Column:
-    """Lista de devoluciones registradas."""
-    from database.queries import obtenerDevoluciones
+    """Lista de devoluciones con estados y diálogos de aprobación/rechazo."""
+    from database.queries import (
+        obtenerDevoluciones, aprobarDevolucion, rechazarDevolucion, calcularTarifaTardia,
+    )
+    from views.reusable.succesful import open_succesful_dialog
 
     lista_devoluciones_col = ft.Column(spacing=6, scroll=ft.ScrollMode.AUTO, tight=True)
+
+    # ── Diálogo de aprobación ────────────────────────────────────
+    def _abrir_dialogo_aprobar(id_dev, titulo_libro, nombre_u, fecha_prestamo):
+        tarifa = calcularTarifaTardia(fecha_prestamo)
+
+        tf_observacion = ft.TextField(
+            label="Observación (obligatoria)",
+            multiline=True, min_lines=2, max_lines=4,
+            dense=True, border_radius=8,
+        )
+
+        tarifa_display = ft.Container(
+            padding=ft.Padding(12, 10, 12, 10),
+            border_radius=10,
+            bgcolor=ft.Colors.RED_50 if tarifa > 0 else ft.Colors.GREEN_50,
+            border=ft.Border.all(
+                1, ft.Colors.RED_300 if tarifa > 0 else ft.Colors.GREEN_300
+            ),
+            content=ft.Column(
+                spacing=4,
+                controls=[
+                    ft.Text(
+                        "Tarifa por entrega tardía" if tarifa > 0 else "Entrega a tiempo",
+                        size=13, weight=ft.FontWeight.W_600,
+                        color=ft.Colors.RED_800 if tarifa > 0 else ft.Colors.GREEN_800,
+                    ),
+                    ft.Text(
+                        f"${tarifa:,.0f} COP" if tarifa > 0 else "$0 COP — Sin recargo",
+                        size=22, weight=ft.FontWeight.W_700,
+                        color=ft.Colors.RED_700 if tarifa > 0 else ft.Colors.GREEN_700,
+                    ),
+                    ft.Text(
+                        f"Sanción de $10,000 por cada día de retraso después de 15 días.",
+                        size=11, color=ft.Colors.GREY_600,
+                    ) if tarifa > 0 else ft.Container(),
+                ],
+            ),
+        )
+
+        def _close(e=None):
+            ref = getattr(page, "_aprobar_dev_overlay", None)
+            ov = getattr(page, "overlay", None)
+            if ref and ov and ref in ov:
+                ov.remove(ref)
+            page._aprobar_dev_overlay = None
+            page.update()
+
+        def _confirmar(e):
+            obs = (tf_observacion.value or "").strip()
+            if not obs:
+                tf_observacion.error = "La observación es obligatoria"
+                page.update()
+                return
+            ok, msg = aprobarDevolucion(id_dev, obs, tarifa)
+            if ok:
+                _close()
+                _refrescar()
+                open_succesful_dialog(page, f"Devolución #{id_dev} aprobada correctamente.")
+            else:
+                tf_observacion.error = f"Error: {msg}"
+                page.update()
+
+        modal = ft.Container(
+            width=480, bgcolor=ft.Colors.WHITE, border_radius=14,
+            border=ft.Border.all(1, ft.Colors.GREY_300),
+            padding=ft.Padding(24, 20, 24, 18),
+            shadow=ft.BoxShadow(spread_radius=2, blur_radius=20,
+                                color=ft.Colors.with_opacity(0.15, ft.Colors.BLACK),
+                                offset=ft.Offset(0, 4)),
+            content=ft.Column(spacing=12, tight=True, controls=[
+                ft.Row(alignment=ft.MainAxisAlignment.SPACE_BETWEEN, controls=[
+                    ft.Text(f"Aprobar devolución #{id_dev}", size=16,
+                            weight=ft.FontWeight.W_700, color=ft.Colors.BLACK),
+                    ft.IconButton(icon=ft.Icons.CLOSE, icon_size=20, on_click=_close),
+                ]),
+                ft.Text(
+                    f"Libro: {titulo_libro}\nUsuario: {nombre_u}",
+                    size=13, color=ft.Colors.GREY_700,
+                ),
+                tarifa_display,
+                tf_observacion,
+                ft.Row(alignment=ft.MainAxisAlignment.END, spacing=8, controls=[
+                    ft.OutlinedButton(
+                        content="Cancelar", on_click=_close,
+                        style=ft.ButtonStyle(
+                            shape=ft.RoundedRectangleBorder(radius=10),
+                        ),
+                    ),
+                    ft.FilledButton(
+                        content="Aprobar devolución", on_click=_confirmar,
+                        style=ft.ButtonStyle(
+                            bgcolor=ft.Colors.GREEN_600,
+                            color=ft.Colors.WHITE,
+                            shape=ft.RoundedRectangleBorder(radius=10),
+                        ),
+                    ),
+                ]),
+            ]),
+        )
+        _dim = 1280
+        backdrop = ft.Container(
+            expand=True, alignment=ft.Alignment.CENTER,
+            content=ft.Container(
+                margin=ft.Margin(0), bgcolor=ft.Colors.with_opacity(0.42, ft.Colors.BLACK),
+                alignment=ft.Alignment.CENTER,
+                content=ft.Stack(width=_dim, height=_dim, alignment=ft.Alignment.CENTER, controls=[
+                    ft.GestureDetector(content=ft.Container(width=_dim, height=_dim), on_tap=_close),
+                    modal,
+                ]),
+            ),
+        )
+        _close()
+        page._aprobar_dev_overlay = backdrop
+        ov = getattr(page, "overlay", None)
+        if ov is None:
+            page.overlay = [backdrop]
+        else:
+            ov.append(backdrop)
+        page.update()
+
+    # ── Diálogo de rechazo ───────────────────────────────────────
+    def _abrir_dialogo_rechazar(id_dev, titulo_libro, nombre_u):
+        tf_observacion = ft.TextField(
+            label="Observación (obligatoria)",
+            multiline=True, min_lines=2, max_lines=4,
+            dense=True, border_radius=8,
+        )
+
+        def _close(e=None):
+            ref = getattr(page, "_rechazar_dev_overlay", None)
+            ov = getattr(page, "overlay", None)
+            if ref and ov and ref in ov:
+                ov.remove(ref)
+            page._rechazar_dev_overlay = None
+            page.update()
+
+        def _confirmar(e):
+            obs = (tf_observacion.value or "").strip()
+            if not obs:
+                tf_observacion.error = "La observación es obligatoria"
+                page.update()
+                return
+            ok, msg = rechazarDevolucion(id_dev, obs)
+            if ok:
+                _close()
+                _refrescar()
+                open_succesful_dialog(page, f"Devolución #{id_dev} rechazada.")
+            else:
+                tf_observacion.error = f"Error: {msg}"
+                page.update()
+
+        modal = ft.Container(
+            width=440, bgcolor=ft.Colors.WHITE, border_radius=14,
+            border=ft.Border.all(1, ft.Colors.GREY_300),
+            padding=ft.Padding(24, 20, 24, 18),
+            shadow=ft.BoxShadow(spread_radius=2, blur_radius=20,
+                                color=ft.Colors.with_opacity(0.15, ft.Colors.BLACK),
+                                offset=ft.Offset(0, 4)),
+            content=ft.Column(spacing=12, tight=True, controls=[
+                ft.Row(alignment=ft.MainAxisAlignment.SPACE_BETWEEN, controls=[
+                    ft.Text(f"Rechazar devolución #{id_dev}", size=16,
+                            weight=ft.FontWeight.W_700, color=ft.Colors.BLACK),
+                    ft.IconButton(icon=ft.Icons.CLOSE, icon_size=20, on_click=_close),
+                ]),
+                ft.Text(
+                    f"Libro: {titulo_libro}\nUsuario: {nombre_u}",
+                    size=13, color=ft.Colors.GREY_700,
+                ),
+                tf_observacion,
+                ft.Row(alignment=ft.MainAxisAlignment.END, spacing=8, controls=[
+                    ft.OutlinedButton(
+                        content="Cancelar", on_click=_close,
+                        style=ft.ButtonStyle(
+                            shape=ft.RoundedRectangleBorder(radius=10),
+                        ),
+                    ),
+                    ft.FilledButton(
+                        content="Rechazar devolución", on_click=_confirmar,
+                        style=ft.ButtonStyle(
+                            bgcolor=ft.Colors.RED_600,
+                            color=ft.Colors.WHITE,
+                            shape=ft.RoundedRectangleBorder(radius=10),
+                        ),
+                    ),
+                ]),
+            ]),
+        )
+        _dim = 1280
+        backdrop = ft.Container(
+            expand=True, alignment=ft.Alignment.CENTER,
+            content=ft.Container(
+                margin=ft.Margin(0), bgcolor=ft.Colors.with_opacity(0.42, ft.Colors.BLACK),
+                alignment=ft.Alignment.CENTER,
+                content=ft.Stack(width=_dim, height=_dim, alignment=ft.Alignment.CENTER, controls=[
+                    ft.GestureDetector(content=ft.Container(width=_dim, height=_dim), on_tap=_close),
+                    modal,
+                ]),
+            ),
+        )
+        _close()
+        page._rechazar_dev_overlay = backdrop
+        ov = getattr(page, "overlay", None)
+        if ov is None:
+            page.overlay = [backdrop]
+        else:
+            ov.append(backdrop)
+        page.update()
+
+    # ── Refrescar lista ──────────────────────────────────────────
+    def _fmt_fecha(dt_obj):
+        if hasattr(dt_obj, "strftime"):
+            return dt_obj.strftime("%d/%m/%Y")
+        return str(dt_obj) if dt_obj else "—"
 
     def _refrescar():
         devoluciones = obtenerDevoluciones()
@@ -1196,13 +1436,80 @@ def build_admin_devoluciones(page: ft.Page) -> ft.Column:
 
         for d in devoluciones:
             # d: (idDevolucion, idPrestamo, observaciones, codigoUsuario,
-            #     nombreUsuario, titulo, ejemplar)
+            #     nombreUsuario, titulo, ejemplar, estadoDevolucion, tarifaCobro,
+            #     fechaDevolucion, fechaPrestamo)
             id_dev = d[0]
             id_prest = d[1]
             observaciones = d[2] or ""
             nombre_u = d[4]
             titulo = d[5]
             ejemplar = d[6]
+            estado = d[7] if len(d) > 7 else "Aprobada"
+            tarifa = d[8] if len(d) > 8 else 0
+            fecha_dev = d[9] if len(d) > 9 else None
+            fecha_prest = d[10] if len(d) > 10 else None
+
+            # Badge de estado
+            badge_colors = {
+                "En solicitud": ft.Colors.AMBER_700,
+                "Aprobada": ft.Colors.GREEN_600,
+                "Rechazada": ft.Colors.RED_600,
+            }
+            badge_color = badge_colors.get(estado, ft.Colors.GREY_600)
+
+            # Info adicional para aprobadas/rechazadas
+            info_extra = []
+            if observaciones and estado != "En solicitud":
+                info_extra.append(
+                    ft.Text(
+                        f"Obs: {observaciones}",
+                        size=11, color=ft.Colors.GREY_600, italic=True,
+                        max_lines=2, overflow=ft.TextOverflow.ELLIPSIS,
+                    )
+                )
+            if estado == "Aprobada" and tarifa and float(tarifa) > 0:
+                info_extra.append(
+                    ft.Container(
+                        padding=ft.Padding(6, 2, 6, 2),
+                        border_radius=4,
+                        bgcolor=ft.Colors.RED_100,
+                        content=ft.Text(
+                            f"Tarifa: ${float(tarifa):,.0f} COP",
+                            size=10, weight=ft.FontWeight.W_600,
+                            color=ft.Colors.RED_700,
+                        ),
+                    )
+                )
+
+            # Botones según estado
+            botones_accion = []
+            if estado == "En solicitud":
+                def _make_aprobar(idv, t, n, fp):
+                    return lambda e: _abrir_dialogo_aprobar(idv, t, n, fp)
+
+                def _make_rechazar(idv, t, n):
+                    return lambda e: _abrir_dialogo_rechazar(idv, t, n)
+
+                botones_accion = [
+                    ft.FilledButton(
+                        content="Aprobar", width=100, height=32,
+                        on_click=_make_aprobar(id_dev, titulo, nombre_u, fecha_prest),
+                        style=ft.ButtonStyle(
+                            bgcolor=ft.Colors.GREEN_600, color=ft.Colors.WHITE,
+                            shape=ft.RoundedRectangleBorder(radius=8),
+                            text_style=ft.TextStyle(size=12, weight=ft.FontWeight.W_600),
+                        ),
+                    ),
+                    ft.FilledButton(
+                        content="Rechazar", width=100, height=32,
+                        on_click=_make_rechazar(id_dev, titulo, nombre_u),
+                        style=ft.ButtonStyle(
+                            bgcolor=ft.Colors.RED_600, color=ft.Colors.WHITE,
+                            shape=ft.RoundedRectangleBorder(radius=8),
+                            text_style=ft.TextStyle(size=12, weight=ft.FontWeight.W_600),
+                        ),
+                    ),
+                ]
 
             fila = ft.Container(
                 border=ft.Border.all(1, ft.Colors.GREY_200),
@@ -1224,8 +1531,8 @@ def build_admin_devoluciones(page: ft.Page) -> ft.Column:
                                         ft.Container(
                                             padding=ft.Padding(8, 2, 8, 2),
                                             border_radius=4,
-                                            bgcolor=ft.Colors.GREEN_600,
-                                            content=ft.Text("Devuelto", size=10, weight=ft.FontWeight.W_600,
+                                            bgcolor=badge_color,
+                                            content=ft.Text(estado, size=10, weight=ft.FontWeight.W_600,
                                                             color=ft.Colors.WHITE),
                                         ),
                                     ],
@@ -1236,11 +1543,13 @@ def build_admin_devoluciones(page: ft.Page) -> ft.Column:
                                     max_lines=1, overflow=ft.TextOverflow.ELLIPSIS,
                                 ),
                                 ft.Text(
-                                    f"Usuario: {nombre_u}",
+                                    f"Usuario: {nombre_u}  |  Solicitud: {_fmt_fecha(fecha_dev)}",
                                     size=11, color=ft.Colors.GREY_600,
                                 ),
+                                *info_extra,
                             ],
                         ),
+                        ft.Row(spacing=6, controls=botones_accion),
                     ],
                 ),
             )

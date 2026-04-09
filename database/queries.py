@@ -291,9 +291,9 @@ def obtenerSiguienteIdPrestamo():
 
 
 def registrarPrestamo(id_prestamo, codigo_usuario, ejemplar, fecha_prestamo, fecha_vencimiento):
-    """Registra un préstamo."""
-    query = """INSERT INTO prestamos (idPrestamo, codigoUsuario, ejemplar, fechaPrestamo, fechaVencimiento)
-               VALUES (%s, %s, %s, %s, %s)"""
+    """Registra un préstamo con estado 'En solicitud'."""
+    query = """INSERT INTO prestamos (idPrestamo, codigoUsuario, ejemplar, fechaPrestamo, fechaVencimiento, estadoPrestamo)
+               VALUES (%s, %s, %s, %s, %s, 'En solicitud')"""
     success, result = execute_query(
         query, (id_prestamo, codigo_usuario, ejemplar, fecha_prestamo, fecha_vencimiento)
     )
@@ -305,7 +305,7 @@ def registrarPrestamo(id_prestamo, codigo_usuario, ejemplar, fecha_prestamo, fec
 
 def obtenerPrestamosUsuario(codigo_usuario):
     """
-    Retorna los préstamos activos de un usuario (sin devolución registrada).
+    Retorna los préstamos activos de un usuario (aprobados, sin devolución aprobada).
     Columnas: idPrestamo, ejemplar, fechaPrestamo, fechaVencimiento, titulo, autores, descripción
     """
     query = """
@@ -315,7 +315,8 @@ def obtenerPrestamosUsuario(codigo_usuario):
         INNER JOIN ejemplaresfisicos ef ON ef.idEjemplar = p.ejemplar
         INNER JOIN libros l ON l.isbn = ef.codigoIsbn
         WHERE p.codigoUsuario = %s
-          AND NOT EXISTS (SELECT 1 FROM devoluciones d WHERE d.idPrestamo = p.idPrestamo)
+          AND p.estadoPrestamo = 'Aprobada'
+          AND NOT EXISTS (SELECT 1 FROM devoluciones d WHERE d.idPrestamo = p.idPrestamo AND d.estadoDevolucion = 'Aprobada')
         ORDER BY p.fechaPrestamo DESC
     """
     success, data = fetch_query(query, (codigo_usuario,))
@@ -328,12 +329,13 @@ def obtenerHistorialPrestamosUsuario(codigo_usuario):
     """
     Retorna TODOS los préstamos de un usuario (activos + devueltos).
     Columnas: idPrestamo, ejemplar, fechaPrestamo, fechaVencimiento,
-              titulo, autores, descripción, devuelto (1/0)
+              titulo, autores, descripción, devuelto (1/0), estadoPrestamo
     """
     query = """
         SELECT p.idPrestamo, p.ejemplar, p.fechaPrestamo, p.fechaVencimiento,
                l.titulo, l.autores, l.descripción,
-               CASE WHEN d.idDevolucion IS NOT NULL THEN 1 ELSE 0 END AS devuelto
+               CASE WHEN d.idDevolucion IS NOT NULL AND d.estadoDevolucion = 'Aprobada' THEN 1 ELSE 0 END AS devuelto,
+               p.estadoPrestamo
         FROM prestamos p
         INNER JOIN ejemplaresfisicos ef ON ef.idEjemplar = p.ejemplar
         INNER JOIN libros l ON l.isbn = ef.codigoIsbn
@@ -351,7 +353,7 @@ def obtenerHistorialPrestamosUsuario(codigo_usuario):
 
 def obtenerPrestamosActivos():
     """
-    Préstamos activos (sin devolución registrada).
+    Préstamos activos (aprobados, sin devolución aprobada).
     Columnas: idPrestamo, nombreUsuario, titulo, ejemplar, fechaPrestamo, fechaVencimiento
     """
     query = """
@@ -363,7 +365,8 @@ def obtenerPrestamosActivos():
         INNER JOIN usuarios u ON u.codigo = p.codigoUsuario
         INNER JOIN ejemplaresfisicos ef ON ef.idEjemplar = p.ejemplar
         INNER JOIN libros l ON l.isbn = ef.codigoIsbn
-        WHERE NOT EXISTS (SELECT 1 FROM devoluciones d WHERE d.idPrestamo = p.idPrestamo)
+        WHERE p.estadoPrestamo = 'Aprobada'
+          AND NOT EXISTS (SELECT 1 FROM devoluciones d WHERE d.idPrestamo = p.idPrestamo AND d.estadoDevolucion = 'Aprobada')
         ORDER BY p.fechaPrestamo DESC
     """
     success, data = fetch_query(query)
@@ -386,7 +389,8 @@ def obtenerPrestamosVencidos():
         INNER JOIN usuarios u ON u.codigo = p.codigoUsuario
         INNER JOIN ejemplaresfisicos ef ON ef.idEjemplar = p.ejemplar
         INNER JOIN libros l ON l.isbn = ef.codigoIsbn
-        WHERE NOT EXISTS (SELECT 1 FROM devoluciones d WHERE d.idPrestamo = p.idPrestamo)
+        WHERE p.estadoPrestamo = 'Aprobada'
+          AND NOT EXISTS (SELECT 1 FROM devoluciones d WHERE d.idPrestamo = p.idPrestamo AND d.estadoDevolucion = 'Aprobada')
           AND p.fechaVencimiento < NOW()
         ORDER BY p.fechaVencimiento ASC
     """
@@ -447,19 +451,20 @@ def obtenerPrestamosRecientes():
     """
     Retorna todos los préstamos con info de usuario y libro para el admin.
     Columnas: idPrestamo, codigoUsuario, nombreUsuario, ejemplar, titulo,
-              fechaPrestamo, fechaVencimiento
+              fechaPrestamo, fechaVencimiento, estadoPrestamo
     """
     query = """
         SELECT p.idPrestamo, p.codigoUsuario,
                CONCAT(u.nombre, ' ', u.apellido) AS nombreUsuario,
                p.ejemplar,
                l.titulo,
-               p.fechaPrestamo, p.fechaVencimiento
+               p.fechaPrestamo, p.fechaVencimiento,
+               p.estadoPrestamo
         FROM prestamos p
         INNER JOIN usuarios u ON u.codigo = p.codigoUsuario
         INNER JOIN ejemplaresfisicos ef ON ef.idEjemplar = p.ejemplar
         INNER JOIN libros l ON l.isbn = ef.codigoIsbn
-        ORDER BY p.fechaPrestamo DESC
+        ORDER BY FIELD(p.estadoPrestamo, 'En solicitud', 'Aprobada', 'Rechazada'), p.fechaPrestamo DESC
     """
     success, data = fetch_query(query)
     if success:
@@ -467,21 +472,29 @@ def obtenerPrestamosRecientes():
     return []
 
 
-def denegarPrestamo(id_prestamo):
+def aprobarPrestamo(id_prestamo):
+    """Aprueba un préstamo: cambia estado a 'Aprobada'."""
+    query = "UPDATE prestamos SET estadoPrestamo = 'Aprobada' WHERE idPrestamo = %s"
+    success, result = execute_query(query, (id_prestamo,))
+    if success:
+        return True, "Préstamo aprobado"
+    return False, result
+
+
+def rechazarPrestamo(id_prestamo):
     """
-    Deniega un préstamo: elimina el registro y libera el ejemplar.
+    Rechaza un préstamo: cambia estado a 'Rechazada' y libera el ejemplar.
     """
-    # Obtener el ejemplar para liberarlo
     query_ej = "SELECT ejemplar FROM prestamos WHERE idPrestamo = %s"
     success, data = fetch_query(query_ej, (id_prestamo,))
     if success and data:
         ejemplar_id = data[0][0]
         actualizarEstadoEjemplar(ejemplar_id, "Disponible")
 
-    query = "DELETE FROM prestamos WHERE idPrestamo = %s"
+    query = "UPDATE prestamos SET estadoPrestamo = 'Rechazada' WHERE idPrestamo = %s"
     success, result = execute_query(query, (id_prestamo,))
     if success:
-        return True, "Préstamo denegado"
+        return True, "Préstamo rechazado"
     return False, result
 
 
@@ -497,39 +510,82 @@ def obtenerSiguienteIdDevolucion():
 
 
 def registrarDevolucion(id_devolucion, id_prestamo, observaciones=""):
-    """Registra una devolución y libera el ejemplar."""
+    """Registra una solicitud de devolución (estado 'En solicitud'). NO libera el ejemplar."""
+    import datetime
+    fecha_dev = datetime.datetime.now()
+    query = """INSERT INTO devoluciones (idDevolucion, idPrestamo, observaciones, estadoDevolucion, fechaDevolucion)
+               VALUES (%s, %s, %s, 'En solicitud', %s)"""
+    success, result = execute_query(query, (id_devolucion, id_prestamo, observaciones, fecha_dev))
+    if success:
+        return True, "Solicitud de devolución registrada"
+    return False, result
+
+
+def aprobarDevolucion(id_devolucion, observaciones, tarifa):
+    """Aprueba una devolución: guarda observación + tarifa y libera el ejemplar."""
     # Obtener el ejemplar del préstamo para liberarlo
-    query_ej = "SELECT ejemplar FROM prestamos WHERE idPrestamo = %s"
-    success, data = fetch_query(query_ej, (id_prestamo,))
+    query_ej = """
+        SELECT p.ejemplar FROM devoluciones d
+        INNER JOIN prestamos p ON p.idPrestamo = d.idPrestamo
+        WHERE d.idDevolucion = %s
+    """
+    success, data = fetch_query(query_ej, (id_devolucion,))
     if success and data:
         ejemplar_id = data[0][0]
         actualizarEstadoEjemplar(ejemplar_id, "Disponible")
 
-    query = """INSERT INTO devoluciones (idDevolucion, idPrestamo, observaciones)
-               VALUES (%s, %s, %s)"""
-    success, result = execute_query(query, (id_devolucion, id_prestamo, observaciones))
+    query = """UPDATE devoluciones
+               SET estadoDevolucion = 'Aprobada', observaciones = %s, tarifaCobro = %s
+               WHERE idDevolucion = %s"""
+    success, result = execute_query(query, (observaciones, tarifa, id_devolucion))
     if success:
-        return True, "Devolución registrada"
+        return True, "Devolución aprobada"
     return False, result
+
+
+def rechazarDevolucion(id_devolucion, observaciones):
+    """Rechaza una devolución con observación."""
+    query = """UPDATE devoluciones
+               SET estadoDevolucion = 'Rechazada', observaciones = %s
+               WHERE idDevolucion = %s"""
+    success, result = execute_query(query, (observaciones, id_devolucion))
+    if success:
+        return True, "Devolución rechazada"
+    return False, result
+
+
+def calcularTarifaTardia(fecha_prestamo):
+    """Calcula la tarifa por entrega tardía ($10,000/día después de 15 días)."""
+    import datetime
+    if not fecha_prestamo:
+        return 0
+    if isinstance(fecha_prestamo, str):
+        fecha_prestamo = datetime.datetime.strptime(fecha_prestamo, "%Y-%m-%d %H:%M:%S")
+    dias = (datetime.datetime.now() - fecha_prestamo).days
+    if dias > 15:
+        return (dias - 15) * 10000
+    return 0
 
 
 def obtenerDevoluciones():
     """
     Retorna todas las devoluciones con info del préstamo, usuario y libro.
     Columnas: idDevolucion, idPrestamo, observaciones, codigoUsuario, nombreUsuario,
-              titulo, ejemplar
+              titulo, ejemplar, estadoDevolucion, tarifaCobro, fechaDevolucion, fechaPrestamo
     """
     query = """
         SELECT d.idDevolucion, d.idPrestamo, d.observaciones,
                p.codigoUsuario,
                CONCAT(u.nombre, ' ', u.apellido) AS nombreUsuario,
-               l.titulo, p.ejemplar
+               l.titulo, p.ejemplar,
+               d.estadoDevolucion, d.tarifaCobro, d.fechaDevolucion,
+               p.fechaPrestamo
         FROM devoluciones d
         INNER JOIN prestamos p ON p.idPrestamo = d.idPrestamo
         INNER JOIN usuarios u ON u.codigo = p.codigoUsuario
         INNER JOIN ejemplaresfisicos ef ON ef.idEjemplar = p.ejemplar
         INNER JOIN libros l ON l.isbn = ef.codigoIsbn
-        ORDER BY d.idDevolucion DESC
+        ORDER BY FIELD(d.estadoDevolucion, 'En solicitud', 'Aprobada', 'Rechazada'), d.idDevolucion DESC
     """
     success, data = fetch_query(query)
     if success:
