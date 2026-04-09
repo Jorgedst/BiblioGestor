@@ -1,7 +1,7 @@
 import flet as ft
 from views.reusable.commonSideBar import commonSideBar
 from views.reusable.soyAdminBtn import soyAdminBtn
-from database.queries import validarUserCodigo
+from database.queries import validarUser
 
 
 def login_page(page: ft.Page):
@@ -12,7 +12,7 @@ def login_page(page: ft.Page):
             txtFieldCodigoUsuario.error = "Ingresa un codigo"
             return
         else:
-            existe, data = validarUserCodigo(codigo)
+            existe, data = validarUser(codigo, "codigo")
             # PRUEBAS CAMBIAR DESPUES OOJOOOOOOO
             page.session.store.set("codigo_usuario", codigo)
             if existe:

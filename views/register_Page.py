@@ -2,7 +2,7 @@ import flet as ft
 from views.reusable.commonSideBar import commonSideBar
 from views.reusable.soyAdminBtn import soyAdminBtn
 from views.reusable.dropDownCarrera import getOptionsDropDown
-from database.queries import validarUserIdentificacion
+from database.queries import validarUser
 from database.queries import registrar_Usuario
 
 
@@ -94,7 +94,7 @@ def register_Page(page: ft.Page):
         if (not txtFieldCorreo.value):
             txtFieldCorreo.error = "Ingresa un correo"
             return
-        existe, data = validarUserIdentificacion(txtFieldId.value)
+        existe, data = validarUser(txtFieldId.value, "identificación")
         if existe:
             return
         else:

@@ -15,7 +15,35 @@ def loginAdmin(page: ft.Page):
             if codigoAdmin == claveAdmin:
                 await page.push_route("/dashboardAdmin")
             else:
-                return
+                dlg = ft.AlertDialog(
+                    modal=True,
+                    title=ft.Row(
+                        alignment=ft.MainAxisAlignment.CENTER,
+                        controls=[
+                            ft.Icon(ft.Icons.ERROR_OUTLINE, color=ft.Colors.RED_600, size=28),
+                            ft.Text("Código incorrecto", size=18, weight=ft.FontWeight.W_700,
+                                    color=ft.Colors.RED_600),
+                        ],
+                    ),
+                    content=ft.Text(
+                        "El código de administrador es incorrecto.\nIntenta de nuevo.",
+                        size=14, color=ft.Colors.GREY_800, text_align=ft.TextAlign.CENTER,
+                    ),
+                    actions=[
+                        ft.FilledButton(
+                            content="Aceptar",
+                            style=ft.ButtonStyle(
+                                bgcolor=ft.Colors.GREY_900, color=ft.Colors.WHITE,
+                                shape=ft.RoundedRectangleBorder(radius=8),
+                            ),
+                            on_click=lambda ev: (setattr(dlg, 'open', False), page.update()),
+                        ),
+                    ],
+                    actions_alignment=ft.MainAxisAlignment.CENTER,
+                )
+                page.overlay.append(dlg)
+                dlg.open = True
+                page.update()
     
     txtFieldCodigoAdmin = ft.TextField(
         password= True,

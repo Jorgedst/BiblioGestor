@@ -16,7 +16,14 @@ def main(page: ft.Page):
     page.fonts = {
         "Inter": "Inter-VariableFont_opsz,wght.ttf"
     }
-    page.theme = ft.Theme(font_family="Inter")
+    page.theme = ft.Theme(
+        font_family="Inter",
+        text_theme=ft.TextTheme(
+            body_large=ft.TextStyle(color=ft.Colors.BLACK),
+            body_medium=ft.TextStyle(color=ft.Colors.BLACK),
+            body_small=ft.TextStyle(color=ft.Colors.BLACK),
+        ),
+    )
 
     def route_change(e: ft.RouteChangeEvent):
         page.views.clear()

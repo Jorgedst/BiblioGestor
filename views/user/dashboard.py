@@ -1,5 +1,5 @@
 import flet as ft
-from database.queries import obtenerUsuarioInfo
+from database.queries import obtenerUsuarioInfo, obtenerCategorias, obtenerLibrosFiltrados
 from views.reusable.btnesCategoria import botonesCategoria
 from views.user.prestar_dialog import open_prestar_dialog
 
@@ -119,114 +119,123 @@ def card_box_libro(
     )
 
 
-def _libros_ejemplo() -> list[dict]:
-    """Datos de diseño; sustituir por resultados de búsqueda cuando exista la query."""
-    return [
-        {
-            "titulo": "Título libro",
-            "autores": "Autor(es)",
-            "editorial": "Alfaguara",
-            "anio": "1999",
-            "descripcion": "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor.",
-        },
-        {
-            "titulo": "Cien años de soledad",
-            "autores": "Gabriel García Márquez",
-            "editorial": "Sudamericana",
-            "anio": "1967",
-            "descripcion": "Novela fundacional del boom latinoamericano y obra cumbre del realismo mágico.",
-        },
-        {
-            "titulo": "El ingenioso hidalgo",
-            "autores": "Miguel de Cervantes",
-            "editorial": "Francisco de Robles",
-            "anio": "1605",
-            "descripcion": "Clásico de la literatura española y precursor de la novela moderna.",
-        },
-        {
-            "titulo": "El ingenioso hidalgo",
-            "autores": "Miguel de Cervantes",
-            "editorial": "Francisco de Robles",
-            "anio": "1605",
-            "descripcion": "Clásico de la literatura española y precursor de la novela moderna.",
-        },
-        {
-            "titulo": "El ingenioso hidalgo",
-            "autores": "Miguel de Cervantes",
-            "editorial": "Francisco de Robles",
-            "anio": "1605",
-            "descripcion": "Clásico de la literatura española y precursor de la novela moderna.",
-        },
-        {
-            "titulo": "El ingenioso hidalgo",
-            "autores": "Miguel de Cervantes",
-            "editorial": "Francisco de Robles",
-            "anio": "1605",
-            "descripcion": "Clásico de la literatura española y precursor de la novela moderna.",
-        },
-        {
-            "titulo": "El ingenioso hidalgo",
-            "autores": "Miguel de Cervantes",
-            "editorial": "Francisco de Robles",
-            "anio": "1605",
-            "descripcion": "Clásico de la literatura española y precursor de la novela moderna.",
-        },
-        {
-            "titulo": "El ingenioso hidalgo",
-            "autores": "Miguel de Cervantes",
-            "editorial": "Francisco de Robles",
-            "anio": "1605",
-            "descripcion": "Clásico de la literatura española y precursor de la novela moderna.",
-        },
-        {
-            "titulo": "El ingenioso hidalgo",
-            "autores": "Miguel de Cervantes",
-            "editorial": "Francisco de Robles",
-            "anio": "1605",
-            "descripcion": "Clásico de la literatura española y precursor de la novela moderna.",
-        },
-    ]
-
-
-def fila_libros_scrollable(page: ft.Page) -> ft.Container:
-    """Fila horizontal con scroll; aquí se conectará la búsqueda."""
-    libros = _libros_ejemplo()
-
-    def _prestar_factory(libro: dict):
-        def _handler(e):
-            open_prestar_dialog(page, libro)
-
-        return _handler
-
-    cards = [
-        card_box_libro(
-            titulo=L["titulo"],
-            autores=L["autores"],
-            editorial=L["editorial"],
-            anio=L["anio"],
-            descripcion=L["descripcion"],
-            on_prestar=_prestar_factory(L),
-        )
-        for L in libros
-    ]
-
-    return ft.Container(
-        width=1000,
-        height=270,
-        margin=ft.Margin(16, 0, 0, 0),
-        content=ft.Row(
-            scroll=ft.ScrollMode.AUTO,
-            spacing=12,
-            controls=cards,
-        ),
-    )
-
-
 def build_dashboard_main_body(page: ft.Page) -> ft.Column:
 
     codigoSesionUsuario = page.session.store.get("codigo_usuario")
     infoUsuario = obtenerUsuarioInfo(codigoSesionUsuario)
     nombreUsuario = infoUsuario[0][2] if infoUsuario else "Usuario"
+
+    # ── Estado de los filtros ────────────────────────────────────
+    categoria_seleccionada = {"valor": ""}       # "" = Todos
+    solo_disponibles = {"valor": False}
+    texto_busqueda = {"valor": ""}
+
+    # ── Refs a contenedores dinámicos ────────────────────────────
+    fila_libros_ref = ft.Ref[ft.Row]()
+    fila_categorias_ref = ft.Ref[ft.Row]()
+
+    # ── Construir tarjetas de libros desde la BD ─────────────────
+    def _construir_cards() -> list[ft.Control]:
+        libros_raw = obtenerLibrosFiltrados(
+            texto_busqueda=texto_busqueda["valor"],
+            categoria=categoria_seleccionada["valor"],
+            solo_disponibles=solo_disponibles["valor"],
+        )
+
+        if not libros_raw:
+            return [
+                ft.Container(
+                    width=960,
+                    height=250,
+                    alignment=ft.Alignment.CENTER,
+                    content=ft.Column(
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                        alignment=ft.MainAxisAlignment.CENTER,
+                        spacing=8,
+                        controls=[
+                            ft.Icon(ft.Icons.SEARCH_OFF, size=48, color=ft.Colors.GREY_400),
+                            ft.Text(
+                                "No se encontraron libros",
+                                size=16,
+                                weight=ft.FontWeight.W_500,
+                                color=ft.Colors.GREY_500,
+                            ),
+                        ],
+                    ),
+                )
+            ]
+
+        def _prestar_factory(libro_dict: dict):
+            def _handler(e):
+                open_prestar_dialog(page, libro_dict)
+            return _handler
+
+        cards = []
+        for row in libros_raw:
+            libro_dict = {
+                "isbn": row[0],
+                "titulo": row[1],
+                "autores": row[2],
+                "editorial": row[3],
+                "anio": str(row[4]) if row[4] else "",
+                "categoria": row[5] if row[5] else "",
+                "descripcion": row[6] if row[6] else "",
+            }
+            cards.append(
+                card_box_libro(
+                    titulo=libro_dict["titulo"],
+                    autores=libro_dict["autores"],
+                    editorial=libro_dict["editorial"],
+                    anio=libro_dict["anio"],
+                    descripcion=libro_dict["descripcion"],
+                    on_prestar=_prestar_factory(libro_dict),
+                )
+            )
+        return cards
+
+    # ── Construir fila de botones de categoría ───────────────────
+    def _construir_btns_categoria() -> list[ft.Control]:
+        categorias_db = obtenerCategorias()
+        todas = ["Todos"] + categorias_db
+
+        btns = []
+        for cat in todas:
+            valor_filtro = "" if cat == "Todos" else cat
+            es_sel = (categoria_seleccionada["valor"] == valor_filtro)
+
+            def _on_cat_click(e, v=valor_filtro):
+                # Toggle: si ya está seleccionada, deseleccionar (mostrar todos)
+                if categoria_seleccionada["valor"] == v and v != "":
+                    categoria_seleccionada["valor"] = ""
+                else:
+                    categoria_seleccionada["valor"] = v
+                _actualizar_todo()
+
+            btns.append(botonesCategoria(cat, seleccionado=es_sel, on_click=_on_cat_click))
+        return btns
+
+    # ── Actualizar UI completa ───────────────────────────────────
+    def _actualizar_todo():
+        row_libros = fila_libros_ref.current
+        if row_libros:
+            row_libros.controls = _construir_cards()
+
+        row_cats = fila_categorias_ref.current
+        if row_cats:
+            row_cats.controls = _construir_btns_categoria()
+
+        page.update()
+
+    # ── Handlers ─────────────────────────────────────────────────
+    def _on_search_change(e):
+        texto_busqueda["valor"] = e.data if e.data else ""
+        _actualizar_todo()
+
+    def _on_switch_change(e):
+        solo_disponibles["valor"] = e.control.value
+        _actualizar_todo()
+
+    # ── Layout ───────────────────────────────────────────────────
     return ft.Column(
         spacing=0,
         controls=[
@@ -280,7 +289,7 @@ def build_dashboard_main_body(page: ft.Page) -> ft.Column:
                                         height=40,
                                         bar_elevation=2,
                                         bar_overlay_color=ft.Colors.GREY_200,
-                                        bar_hint_text="Busca un libro",
+                                        bar_hint_text="Busca por título, autor o ISBN",
                                         bar_bgcolor=ft.Colors.WHITE,
                                         bar_text_style=ft.TextStyle(
                                             color=ft.Colors.BLACK
@@ -288,6 +297,7 @@ def build_dashboard_main_body(page: ft.Page) -> ft.Column:
                                         bar_hint_text_style=ft.TextStyle(
                                             color=ft.Colors.GREY_400
                                         ),
+                                        on_change=_on_search_change,
                                     ),
                                     ft.Container(
                                         content=ft.Row(
@@ -302,6 +312,7 @@ def build_dashboard_main_body(page: ft.Page) -> ft.Column:
                                                 ft.CupertinoSwitch(
                                                     value=False,
                                                     active_track_color=ft.Colors.BLACK,
+                                                    on_change=_on_switch_change,
                                                 ),
                                             ],
                                         )
@@ -313,19 +324,26 @@ def build_dashboard_main_body(page: ft.Page) -> ft.Column:
                             width=1000,
                             height=30,
                             content=ft.Row(
+                                ref=fila_categorias_ref,
                                 spacing=3,
-                                controls=[
-                                    botonesCategoria("Todos"),
-                                    botonesCategoria("67"),
-                                    botonesCategoria("mibombo"),
-                                    botonesCategoria("Son"),
-                                    botonesCategoria("Sybau"),
-                                ],
+                                scroll=ft.ScrollMode.AUTO,
+                                controls=_construir_btns_categoria(),
                             ),
                         ),
                     ],
                 ),
             ),
-            fila_libros_scrollable(page),
+            # Fila de libros
+            ft.Container(
+                width=1000,
+                height=270,
+                margin=ft.Margin(16, 0, 0, 0),
+                content=ft.Row(
+                    ref=fila_libros_ref,
+                    scroll=ft.ScrollMode.AUTO,
+                    spacing=12,
+                    controls=_construir_cards(),
+                ),
+            ),
         ],
     )

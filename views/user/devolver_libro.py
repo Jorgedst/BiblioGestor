@@ -1,6 +1,11 @@
 import flet as ft
-from views.reusable.userSideBar import userSideBar
-from views.reusable.soyAdminBtn import soyAdminBtn
+from database.queries import (
+    obtenerPrestamosUsuario,
+    obtenerSiguienteIdDevolucion,
+    registrarDevolucion,
+    yaExisteDevolucion,
+)
+from views.reusable.succesful import open_succesful_dialog
 
 # Estilo mockup: verde acción y fondo tipo lavanda en la tarjeta
 _DEVOLVER_GREEN = ft.Colors.LIGHT_GREEN_600
@@ -120,85 +125,182 @@ def card_box_devolver(
     )
 
 
-def _prestamos_ejemplo() -> list[dict]:
-    """Datos de diseño; sustituir por filas de la query."""
-    lorem = (
-        "Lorem ipsum dolor sit amet, consectetur adipiscing elit. "
-        "Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
+def _open_error_dialog(page: ft.Page, mensaje: str):
+    """Overlay de error."""
+
+    def _close_overlay(e=None):
+        overlay_ref = getattr(page, "_error_dev_overlay", None)
+        overlay = getattr(page, "overlay", None)
+        if overlay_ref and overlay is not None and overlay_ref in overlay:
+            overlay.remove(overlay_ref)
+        page._error_dev_overlay = None
+        page.update()
+
+    modal_content = ft.Container(
+        width=420,
+        bgcolor=ft.Colors.WHITE,
+        border_radius=18,
+        border=ft.Border.all(1, ft.Colors.GREY_300),
+        padding=ft.Padding(30, 32, 30, 28),
+        shadow=ft.BoxShadow(
+            spread_radius=2,
+            blur_radius=20,
+            color=ft.Colors.with_opacity(0.15, ft.Colors.BLACK),
+            offset=ft.Offset(0, 4),
+        ),
+        content=ft.Column(
+            spacing=14,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            tight=True,
+            controls=[
+                ft.Container(
+                    width=80,
+                    height=80,
+                    border_radius=40,
+                    bgcolor=ft.Colors.ORANGE_50,
+                    border=ft.Border.all(3, ft.Colors.ORANGE_300),
+                    alignment=ft.Alignment.CENTER,
+                    content=ft.Icon(
+                        icon=ft.Icons.INFO_OUTLINE,
+                        size=48,
+                        color=ft.Colors.ORANGE_600,
+                    ),
+                ),
+                ft.Text(
+                    value="Aviso",
+                    size=22,
+                    weight=ft.FontWeight.W_700,
+                    color=ft.Colors.GREY_900,
+                    text_align=ft.TextAlign.CENTER,
+                ),
+                ft.Text(
+                    value=mensaje,
+                    size=14,
+                    weight=ft.FontWeight.W_400,
+                    color=ft.Colors.GREY_600,
+                    text_align=ft.TextAlign.CENTER,
+                ),
+                ft.Container(height=6),
+                ft.FilledButton(
+                    content="Aceptar",
+                    width=140,
+                    on_click=_close_overlay,
+                    style=ft.ButtonStyle(
+                        bgcolor=ft.Colors.ORANGE_600,
+                        color=ft.Colors.WHITE,
+                        shape=ft.RoundedRectangleBorder(radius=10),
+                    ),
+                ),
+            ],
+        ),
     )
-    return [
-        {
-            "titulo": "Título libro",
-            "autores": "Autor(es)",
-            "fecha_prestamo": "12/02/26",
-            "fecha_devolucion": "20/02/26",
-            "descripcion": lorem,
-        },
-        {
-            "titulo": "Cien años de soledad",
-            "autores": "Gabriel García Márquez",
-            "fecha_prestamo": "01/03/26",
-            "fecha_devolucion": "16/03/26",
-            "descripcion": lorem,
-        },
-        {
-            "titulo": "Rayuela",
-            "autores": "Julio Cortázar",
-            "fecha_prestamo": "05/03/26",
-            "fecha_devolucion": "20/03/26",
-            "descripcion": lorem,
-        },
-        {
-            "titulo": "Rayuela",
-            "autores": "Julio Cortázar",
-            "fecha_prestamo": "05/03/26",
-            "fecha_devolucion": "20/03/26",
-            "descripcion": lorem,
-        },
-        {
-            "titulo": "Rayuela",
-            "autores": "Julio Cortázar",
-            "fecha_prestamo": "05/03/26",
-            "fecha_devolucion": "20/03/26",
-            "descripcion": lorem,
-        },
-        {
-            "titulo": "Rayuela",
-            "autores": "Julio Cortázar",
-            "fecha_prestamo": "05/03/26",
-            "fecha_devolucion": "20/03/26",
-            "descripcion": lorem,
-        },
-        {
-            "titulo": "Ficciones",
-            "autores": "Jorge Luis Borges",
-            "fecha_prestamo": "10/03/26",
-            "fecha_devolucion": "25/03/26",
-            "descripcion": lorem,
-        },
-    ]
+
+    _dim_w = 1280
+    _dim_h = 1280
+    dim_panel = ft.Container(
+        margin=ft.Margin(0),
+        bgcolor=ft.Colors.with_opacity(0.42, ft.Colors.BLACK),
+        alignment=ft.Alignment.CENTER,
+        content=ft.Stack(
+            width=_dim_w,
+            height=_dim_h,
+            alignment=ft.Alignment.CENTER,
+            controls=[
+                ft.GestureDetector(
+                    content=ft.Container(width=_dim_w, height=_dim_h),
+                    on_tap=_close_overlay,
+                ),
+                modal_content,
+            ],
+        ),
+    )
+
+    backdrop = ft.Container(
+        expand=True,
+        alignment=ft.Alignment.CENTER,
+        content=dim_panel,
+    )
+
+    _close_overlay()
+    page._error_dev_overlay = backdrop
+    overlay = getattr(page, "overlay", None)
+    if overlay is None:
+        page.overlay = [backdrop]
+    else:
+        overlay.append(backdrop)
+    page.update()
 
 
 def fila_cards_devolver_scroll(page: ft.Page) -> ft.Container:
-    prestamos = _prestamos_ejemplo()
+    codigo_usuario = page.session.store.get("codigo_usuario")
+    prestamos = obtenerPrestamosUsuario(codigo_usuario) if codigo_usuario else []
 
-    def _on_devolver_factory(_item: dict):
+    if not prestamos:
+        return ft.Container(
+            width=1000,
+            height=460,
+            alignment=ft.Alignment.CENTER,
+            content=ft.Column(
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=8,
+                controls=[
+                    ft.Icon(ft.Icons.LIBRARY_BOOKS_OUTLINED, size=48, color=ft.Colors.GREY_400),
+                    ft.Text(
+                        "No tienes libros prestados actualmente",
+                        size=16,
+                        weight=ft.FontWeight.W_500,
+                        color=ft.Colors.GREY_500,
+                    ),
+                ],
+            ),
+        )
+
+    def _on_devolver_factory(prestamo_row):
+        """
+        prestamo_row: (idPrestamo, ejemplar, fechaPrestamo, fechaVencimiento,
+                       titulo, autores, descripción)
+        """
         def _h(e):
-            pass
+            id_prestamo = prestamo_row[0]
+
+            # Verificar si ya hay una devolución pendiente
+            if yaExisteDevolucion(id_prestamo):
+                _open_error_dialog(
+                    page,
+                    "Ya existe una solicitud de devolución pendiente para este libro.\n"
+                    "Espera a que un administrador la procese.",
+                )
+                return
+
+            id_devolucion = obtenerSiguienteIdDevolucion()
+            ok, msg = registrarDevolucion(id_devolucion, id_prestamo)
+            if ok:
+                open_succesful_dialog(
+                    page,
+                    f"Solicitud de devolución de \"{prestamo_row[4]}\" enviada correctamente, "
+                    "solicita a un administrador que acepte la devolución.",
+                )
+            else:
+                _open_error_dialog(page, f"Error al registrar la devolución: {msg}")
 
         return _h
 
-    cards = [
-        card_box_devolver(
-            titulo=p["titulo"],
-            autores=p["autores"],
-            fecha_prestamo=p["fecha_prestamo"],
-            fecha_devolucion=p["fecha_devolucion"],
-            descripcion=p["descripcion"],
-            on_devolver=_on_devolver_factory(p),
+    cards = []
+    for p in prestamos:
+        # p: (idPrestamo, ejemplar, fechaPrestamo, fechaVencimiento, titulo, autores, descripción)
+        fecha_p = p[2].strftime("%d/%m/%y") if hasattr(p[2], "strftime") else str(p[2])
+        fecha_v = p[3].strftime("%d/%m/%y") if hasattr(p[3], "strftime") else str(p[3])
+        cards.append(
+            card_box_devolver(
+                titulo=p[4] or "Sin título",
+                autores=p[5] or "Sin autor",
+                fecha_prestamo=fecha_p,
+                fecha_devolucion=fecha_v,
+                descripcion=p[6] or "",
+                on_devolver=_on_devolver_factory(p),
+            )
         )
-        for p in prestamos
-    ]
 
     # ListView horizontal + ALWAYS: la barra se mantiene visible (AUTO a veces no se ve).
     return ft.Container(
@@ -234,38 +336,5 @@ def devolver_libro_body_after_sidebar(page: ft.Page) -> ft.Column:
                 ),
             ),
             fila_cards_devolver_scroll(page),
-        ],
-    )
-
-
-def devolverLibro(page: ft.Page):
-    return ft.View(
-        route="/devolverLibro",
-        spacing=0,
-        padding=0,
-        controls=[
-            ft.Container(
-                bgcolor=ft.Colors.WHITE,
-                width=1280,
-                height=670,
-                content=ft.Row(
-                    spacing=0,
-                    controls=[
-                        userSideBar(page),
-                        ft.VerticalDivider(),
-                        ft.Container(
-                            width=1000,
-                            height=700,
-                            content=ft.Column(
-                                spacing=0,
-                                controls=[
-                                    soyAdminBtn(page),
-                                    devolver_libro_body_after_sidebar(page),
-                                ],
-                            ),
-                        ),
-                    ],
-                ),
-            )
         ],
     )

@@ -1,6 +1,5 @@
 import flet as ft
-from views.reusable.userSideBar import userSideBar
-from views.reusable.soyAdminBtn import soyAdminBtn
+from database.queries import obtenerHistorialPrestamosUsuario
 
 _CARD_BG = ft.Colors.WHITE
 _CARD_WIDTH = 300
@@ -14,9 +13,10 @@ def card_historial_prestamo(
     fecha_prestamo: str,
     fecha_devolucion: str,
     descripcion: str,
+    devuelto: bool = False,
     imagen_src: str | None = None,
 ) -> ft.Container:
-    """Tarjeta de registro del historial (solo lectura). Listo para enlazar con la query."""
+    """Tarjeta de registro del historial (solo lectura)."""
     portada = (
         ft.Container(
             height=_PORTADA_H,
@@ -48,6 +48,14 @@ def card_historial_prestamo(
         )
     )
 
+    # Badge de estado
+    if devuelto:
+        badge_color = ft.Colors.BLUE_600
+        badge_text = "Devuelto"
+    else:
+        badge_color = ft.Colors.GREEN_600
+        badge_text = "Activo"
+
     return ft.Container(
         width=_CARD_WIDTH,
         height=_CARD_HEIGHT,
@@ -60,13 +68,29 @@ def card_historial_prestamo(
             spacing=10,
             tight=True,
             controls=[
-                ft.Text(
-                    titulo,
-                    size=16,
-                    weight=ft.FontWeight.W_700,
-                    color=ft.Colors.GREY_900,
-                    max_lines=2,
-                    overflow=ft.TextOverflow.ELLIPSIS,
+                ft.Row(
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    controls=[
+                        ft.Text(
+                            titulo,
+                            size=16,
+                            weight=ft.FontWeight.W_700,
+                            color=ft.Colors.GREY_900,
+                            max_lines=2,
+                            overflow=ft.TextOverflow.ELLIPSIS,
+                            expand=True,
+                        ),
+                        ft.Container(
+                            padding=ft.Padding(8, 3, 8, 3),
+                            border_radius=6,
+                            bgcolor=badge_color,
+                            content=ft.Text(
+                                badge_text, size=10,
+                                weight=ft.FontWeight.W_600,
+                                color=ft.Colors.WHITE,
+                            ),
+                        ),
+                    ],
                 ),
                 ft.Text(
                     autores,
@@ -84,7 +108,7 @@ def card_historial_prestamo(
                     color=ft.Colors.GREY_900,
                 ),
                 ft.Text(
-                    value=f"Fecha devolución: {fecha_devolucion}",
+                    value=f"Fecha vencimiento: {fecha_devolucion}",
                     size=12,
                     weight=ft.FontWeight.W_700,
                     color=ft.Colors.GREY_900,
@@ -101,64 +125,49 @@ def card_historial_prestamo(
     )
 
 
-def _registros_ejemplo() -> list[dict]:
-    """Datos de diseño; sustituir por filas de la query."""
-    lorem = (
-        "Lorem ipsum dolor sit amet, consectetur adipiscing elit. "
-        "Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
-    )
-    return [
-        {
-            "titulo": "Título libro",
-            "autores": "Autor(es)",
-            "fecha_prestamo": "12/02/26",
-            "fecha_devolucion": "20/02/26",
-            "descripcion": lorem,
-        },
-        {
-            "titulo": "Cien años de soledad",
-            "autores": "Gabriel García Márquez",
-            "fecha_prestamo": "01/03/26",
-            "fecha_devolucion": "16/03/26",
-            "descripcion": lorem,
-        },
-        {
-            "titulo": "Rayuela",
-            "autores": "Julio Cortázar",
-            "fecha_prestamo": "05/03/26",
-            "fecha_devolucion": "20/03/26",
-            "descripcion": lorem,
-        },
-        {
-            "titulo": "Pedro Páramo",
-            "autores": "Juan Rulfo",
-            "fecha_prestamo": "08/03/26",
-            "fecha_devolucion": "23/03/26",
-            "descripcion": lorem,
-        },
-        {
-            "titulo": "Ficciones",
-            "autores": "Jorge Luis Borges",
-            "fecha_prestamo": "10/03/26",
-            "fecha_devolucion": "25/03/26",
-            "descripcion": lorem,
-        },
-    ]
+def fila_historial_scroll(page: ft.Page) -> ft.Container:
+    """Zona scroll horizontal con datos reales del historial."""
+    codigo_usuario = page.session.store.get("codigo_usuario")
+    prestamos = obtenerHistorialPrestamosUsuario(codigo_usuario) if codigo_usuario else []
 
-
-def fila_historial_scroll() -> ft.Container:
-    """Misma zona scroll horizontal que devolver_libro (altura y ListView)."""
-    registros = _registros_ejemplo()
-    cards = [
-        card_historial_prestamo(
-            titulo=r["titulo"],
-            autores=r["autores"],
-            fecha_prestamo=r["fecha_prestamo"],
-            fecha_devolucion=r["fecha_devolucion"],
-            descripcion=r["descripcion"],
+    if not prestamos:
+        return ft.Container(
+            width=1000,
+            height=460,
+            alignment=ft.Alignment.CENTER,
+            content=ft.Column(
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=8,
+                controls=[
+                    ft.Icon(ft.Icons.HISTORY, size=48, color=ft.Colors.GREY_400),
+                    ft.Text(
+                        "No tienes préstamos en tu historial",
+                        size=16,
+                        weight=ft.FontWeight.W_500,
+                        color=ft.Colors.GREY_500,
+                    ),
+                ],
+            ),
         )
-        for r in registros
-    ]
+
+    cards = []
+    for p in prestamos:
+        # p: (idPrestamo, ejemplar, fechaPrestamo, fechaVencimiento,
+        #     titulo, autores, descripción, devuelto)
+        fecha_p = p[2].strftime("%d/%m/%y") if hasattr(p[2], "strftime") else str(p[2])
+        fecha_v = p[3].strftime("%d/%m/%y") if hasattr(p[3], "strftime") else str(p[3])
+        cards.append(
+            card_historial_prestamo(
+                titulo=p[4] or "Sin título",
+                autores=p[5] or "Sin autor",
+                fecha_prestamo=fecha_p,
+                fecha_devolucion=fecha_v,
+                descripcion=p[6] or "",
+                devuelto=bool(p[7]),
+            )
+        )
+
     return ft.Container(
         width=1000,
         height=460,
@@ -191,39 +200,6 @@ def historial_body_after_sidebar(page: ft.Page) -> ft.Column:
                     color=ft.Colors.GREY_900,
                 ),
             ),
-            fila_historial_scroll(),
-        ],
-    )
-
-
-def historial(page: ft.Page):
-    return ft.View(
-        route="/historial",
-        spacing=0,
-        padding=0,
-        controls=[
-            ft.Container(
-                bgcolor=ft.Colors.WHITE,
-                width=1280,
-                height=670,
-                content=ft.Row(
-                    spacing=0,
-                    controls=[
-                        userSideBar(page),
-                        ft.VerticalDivider(),
-                        ft.Container(
-                            width=1000,
-                            height=700,
-                            content=ft.Column(
-                                spacing=0,
-                                controls=[
-                                    soyAdminBtn(page),
-                                    historial_body_after_sidebar(page),
-                                ],
-                            ),
-                        ),
-                    ],
-                ),
-            )
+            fila_historial_scroll(page),
         ],
     )
