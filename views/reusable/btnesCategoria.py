@@ -17,7 +17,7 @@ def botonesCategoria(texto: str, seleccionado: bool = False, on_click=None):
         text_color = ft.Colors.WHITE
 
     btn = ft.Button(
-        width=120,
+        width=125,
         content=ft.Text(
             value=texto,
             size=11,

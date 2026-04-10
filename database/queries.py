@@ -72,6 +72,34 @@ def actualizarUsuario(codigo, nombre, apellido, correo, carrera):
 
 
 def eliminarUsuario(codigo):
+    # 1. Recuperar ejemplares en préstamo activo para volver a ponerlos disponibles
+    query_ejemplares = """
+        SELECT p.ejemplar FROM prestamos p
+        WHERE p.codigoUsuario = %s
+          AND p.estadoPrestamo IN ('En solicitud', 'Aprobada')
+          AND NOT EXISTS (
+              SELECT 1 FROM devoluciones d 
+              WHERE d.idPrestamo = p.idPrestamo AND d.estadoDevolucion = 'Aprobada'
+          )
+    """
+    success_ej, ejemplares = fetch_query(query_ejemplares, (codigo,))
+    if success_ej and ejemplares:
+        for row in ejemplares:
+            execute_query("UPDATE ejemplaresfisicos SET estado = 'Disponible' WHERE idEjemplar = %s", (row[0],))
+            
+    # 2. Borrar las devoluciones asociadas a los préstamos de este usuario
+    query_del_dev = """
+        DELETE FROM devoluciones 
+        WHERE idPrestamo IN (
+            SELECT idPrestamo FROM prestamos WHERE codigoUsuario = %s
+        )
+    """
+    execute_query(query_del_dev, (codigo,))
+    
+    # 3. Borrar los préstamos
+    execute_query("DELETE FROM prestamos WHERE codigoUsuario = %s", (codigo,))
+
+    # 4. Finalmente, borrar al usuario
     query = "DELETE FROM usuarios WHERE codigo = %s"
     success, result = execute_query(query, (codigo,))
     if success:
@@ -196,17 +224,35 @@ def eliminarEjemplar(id_ejemplar):
 def obtenerEjemplaresPorEstado(estado):
     """
     Retorna ejemplares filtrados por estado con info del libro.
+    Para el estado 'Prestado', solo se retornan los que tienen un préstamo activo aprobado.
     Columnas: idEjemplar, codigoIsbn, ubicación, estado, titulo, autores
     """
-    query = """
-        SELECT ef.idEjemplar, ef.codigoIsbn, ef.ubicación, ef.estado,
-               l.titulo, l.autores
-        FROM ejemplaresfisicos ef
-        INNER JOIN libros l ON l.isbn = ef.codigoIsbn
-        WHERE ef.estado = %s
-        ORDER BY l.titulo, ef.idEjemplar
-    """
-    success, data = fetch_query(query, (estado,))
+    if estado == 'Prestado':
+        query = """
+            SELECT DISTINCT ef.idEjemplar, ef.codigoIsbn, ef.ubicación, ef.estado,
+                   l.titulo, l.autores
+            FROM ejemplaresfisicos ef
+            INNER JOIN libros l ON l.isbn = ef.codigoIsbn
+            INNER JOIN prestamos p ON p.ejemplar = ef.idEjemplar
+            WHERE ef.estado = 'Prestado'
+              AND p.estadoPrestamo = 'Aprobada'
+              AND NOT EXISTS (
+                  SELECT 1 FROM devoluciones d WHERE d.idPrestamo = p.idPrestamo AND d.estadoDevolucion = 'Aprobada'
+              )
+            ORDER BY l.titulo, ef.idEjemplar
+        """
+        success, data = fetch_query(query)
+    else:
+        query = """
+            SELECT ef.idEjemplar, ef.codigoIsbn, ef.ubicación, ef.estado,
+                   l.titulo, l.autores
+            FROM ejemplaresfisicos ef
+            INNER JOIN libros l ON l.isbn = ef.codigoIsbn
+            WHERE ef.estado = %s
+            ORDER BY l.titulo, ef.idEjemplar
+        """
+        success, data = fetch_query(query, (estado,))
+        
     if success:
         return data
     return []
@@ -594,8 +640,8 @@ def obtenerDevoluciones():
 
 
 def yaExisteDevolucion(id_prestamo):
-    """Comprueba si ya existe una devolución para un préstamo."""
-    query = "SELECT idDevolucion FROM devoluciones WHERE idPrestamo = %s"
+    """Comprueba si ya existe una devolución pendiente o aprobada para un préstamo."""
+    query = "SELECT idDevolucion FROM devoluciones WHERE idPrestamo = %s AND estadoDevolucion IN ('En solicitud', 'Aprobada')"
     success, data = fetch_query(query, (id_prestamo,))
     if success:
         return len(data) > 0
