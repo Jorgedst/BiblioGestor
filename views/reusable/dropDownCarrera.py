@@ -1,0 +1,36 @@
+import flet as ft
+def getOptionsDropDown():
+    return [
+                ft.DropdownOption(key="Administración de Empresas",
+                                text="Administración de Empresas"),
+                ft.DropdownOption(key="Arquitectura", text="Arquitectura"),
+                ft.DropdownOption(key="Ciencia Política y Gobierno",
+                                text="Ciencia Política y Gobierno"),
+                ft.DropdownOption(key="Comunicación Social y Periodismo",
+                                text="Comunicación Social y Periodismo"),
+                ft.DropdownOption(key="Contaduría Pública",
+                                text="Contaduría Pública"),
+                ft.DropdownOption(key="Derecho", text="Derecho"),
+                ft.DropdownOption(key="Diseño", text="Diseño"),
+                ft.DropdownOption(key="Economía", text="Economía"),
+                ft.DropdownOption(key="Enfermería", text="Enfermería"),
+                ft.DropdownOption(key="Finanzas y Negocios Internacionales",
+                                text="Finanzas y Negocios Internacionales"),
+                ft.DropdownOption(key="Geología", text="Geología"),
+                ft.DropdownOption(key="Historia", text="Historia"),
+                ft.DropdownOption(key="Ing Civil", text="Ing Civil"),
+                ft.DropdownOption(key="Ing Electrónica", text="Ing Electrónica"),
+                ft.DropdownOption(key="Ing Eléctrica", text="Ing Eléctrica"),
+                ft.DropdownOption(key="Ing Industrial", text="Ing Industrial"),
+                ft.DropdownOption(key="Ing Mecánica", text="Ing Mecánica"),
+                ft.DropdownOption(key="Ing de Sistemas", text="Ing de Sistemas"),
+                ft.DropdownOption(key="Matemáticas", text="Matemáticas"),
+                ft.DropdownOption(key="Medicina", text="Medicina"),
+                ft.DropdownOption(key="Música", text="Música"),
+                ft.DropdownOption(key="Negocios Internacionales",
+                                text="Negocios Internacionales"),
+                ft.DropdownOption(key="Psicología", text="Psicología"),
+                ft.DropdownOption(key="Relaciones Internacionales",
+                                text="Relaciones Internacionales")
+            ]
+        
