@@ -2,7 +2,7 @@
 
 ¡Bienvenidos al repositorio de **BiblioGestor**! Este es nuestro sistema de gestión para la biblioteca de la universidad, desarrollado en Python usando la librería Flet para la interfaz gráfica y MySQL para la base de datos.
 
-## 🚀 Cómo abrir y ejecutar el proyecto
+## Cómo abrir y ejecutar el proyecto
 
 Para que puedan descargar y probar el proyecto en sus computadoras, sigan estos pasos rápidos:
 
