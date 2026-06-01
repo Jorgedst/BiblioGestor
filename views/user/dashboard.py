@@ -237,7 +237,7 @@ def build_dashboard_main_body(page: ft.Page) -> ft.Column:
                             f"El libro \"{p[3]}\" vence el {fecha_v} (Ej. #{p[1]}).",
                             size=12,
                             weight=ft.FontWeight.W_500,
-                            color=ft.Colors.AMBER_950,
+                            color=ft.Colors.AMBER_900,
                         )
                     ]
                 )
@@ -365,6 +365,7 @@ def build_dashboard_main_body(page: ft.Page) -> ft.Column:
     # ── Layout ───────────────────────────────────────────────────
     return ft.Column(
         spacing=0,
+        expand=True,
         scroll=ft.ScrollMode.AUTO,
         controls=[
             ft.Container(
@@ -469,7 +470,7 @@ def build_dashboard_main_body(page: ft.Page) -> ft.Column:
             # Fila de libros
             ft.Container(
                 width=1000,
-                height=270,
+                height=290,
                 margin=ft.Margin(16, 0, 0, 0),
                 content=ft.Row(
                     ref=fila_libros_ref,
@@ -483,5 +484,6 @@ def build_dashboard_main_body(page: ft.Page) -> ft.Column:
                 ref=seccion_reservas_ref,
                 content=_construir_seccion_reservas(),
             ),
+            ft.Container(height=60),
         ],
     )

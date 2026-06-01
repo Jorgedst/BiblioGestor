@@ -1,70 +1,45 @@
 # BiblioGestor
 
-BiblioGestor es un sistema moderno de gestión de bibliotecas universitarias desarrollado en Python (con el framework Flet) y MySQL. Este sistema permite a estudiantes y administradores interactuar con el inventario de libros, préstamos, devoluciones y reservas de manera fluida y con una interfaz gráfica amigable.
+¡Bienvenidos al repositorio de **BiblioGestor**! Este es nuestro sistema de gestión para la biblioteca de la universidad, desarrollado en Python usando la librería Flet para la interfaz gráfica y MySQL para la base de datos.
 
-## Arquitectura General
+## 🚀 Cómo abrir y ejecutar el proyecto
 
-El proyecto sigue una arquitectura Cliente-Servidor (Frontend-Backend monolítico):
-- **Frontend / Interfaz**: Desarrollado con [Flet](https://flet.dev/), que permite crear aplicaciones interactivas en Python multiplataforma.
-- **Backend / Lógica**: Funciones modulares de Python que se encargan del enrutamiento de las vistas, autenticación y reglas de negocio (ej. validación de sanciones por entrega tardía, reservas automáticas).
-- **Base de Datos**: MySQL relacional, modelado para soportar usuarios, libros, ejemplares físicos (inventario real), préstamos, devoluciones y reservas.
+Para que puedan descargar y probar el proyecto en sus computadoras, sigan estos pasos rápidos:
 
-## Estructura del Modelo de Datos (E-R)
+### 1. Clonar el repositorio
+Abre tu terminal (o la consola de VS Code) y clona el proyecto:
+```bash
+git clone https://github.com/Jorgedst/BiblioGestor.git
+cd BiblioGestor
+```
 
-1. **Usuarios**: Almacena información de los estudiantes y el personal. Rol (1 = Estudiante, 0 = Admin).
-2. **Libros**: Entidad lógica del libro (ISBN, Título, Autores, etc.).
-3. **Ejemplares Físicos**: Representa cada copia física de un libro en la biblioteca. Tiene su propio estado (`Disponible`, `Prestado`, `Perdido`).
-4. **Préstamos**: Relaciona un usuario con un ejemplar físico. Incluye fechas de préstamo, vencimiento y estados de solicitud.
-5. **Devoluciones**: Registra la devolución de un préstamo específico, incluyendo observaciones y cálculo de multas.
-6. **Reservas**: Permite a un estudiante reservar un ejemplar cuando no hay disponibilidad inmediata.
+### 2. Configurar el Entorno Virtual
+Es muy importante usar un entorno virtual para no mezclar librerías:
+```bash
+# Crear el entorno virtual
+python -m venv venv
 
-## Requisitos Previos
+# Activarlo en Windows:
+venv\Scripts\activate
 
-- Python 3.10 o superior.
-- MySQL Server (local o en la nube como Railway).
-- (Opcional) Docker para despliegue por contenedores.
+# (Si estás en Mac/Linux usa: source venv/bin/activate)
+```
 
-## Cómo desplegar y ejecutar la aplicación localmente
+### 3. Instalar dependencias
+Con el entorno virtual activado, instala las librerías necesarias:
+```bash
+pip install -r requirements.txt
+```
 
-1. **Clonar el repositorio:**
-   ```bash
-   git clone https://github.com/Jorgedst/BiblioGestor.git
-   cd BiblioGestor
-   ```
+### 4. Configurar la Base de Datos
+- Tienes que tener el archivo `.env` en la raíz del proyecto. Si no lo tienes, créalo y pídele a un administrador las credenciales (DB_USER, DB_PASSWORD, etc.).
+- Asegúrate de que tu base de datos esté corriendo y tenga la estructura lista. Si usas MySQL Workbench, puedes ejecutar el script `database/schema.sql` para crear las tablas.
 
-2. **Crear y activar un entorno virtual (Recomendado):**
-   ```bash
-   python -m venv venv
-   # En Windows:
-   venv\Scripts\activate
-   # En Mac/Linux:
-   source venv/bin/activate
-   ```
+### 5. Iniciar la aplicación
+Por último, para abrir la interfaz:
+```bash
+python main.py
+```
 
-3. **Instalar dependencias:**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Configurar la Base de Datos:**
-   - Asegúrate de tener una instancia de MySQL corriendo.
-   - Ejecuta el script `database/schema.sql` en tu gestor de base de datos (por ejemplo, MySQL Workbench) para crear la base de datos `bibliogestor` y todas sus tablas.
-   - Configura las credenciales en el archivo `.env` en la raíz del proyecto:
-     ```env
-     DB_HOST=localhost
-     DB_PORT=3306
-     DB_USER=tu_usuario
-     DB_PASSWORD=tu_contraseña
-     DB_NAME=bibliogestor
-     ```
-
-5. **Ejecutar la aplicación:**
-   ```bash
-   python main.py
-   ```
-
-## Estructura de Contenedores y Despliegue (Docker)
-
-Para un despliegue en contenedores, se puede utilizar el archivo `Dockerfile` (a configurar) para empaquetar la aplicación Flet. Si se desea desplegar también la base de datos, se recomienda un archivo `docker-compose.yml` que levante un contenedor de la base de datos MySQL y otro para la aplicación de Flet interconectados en una red de Docker.
-
-**¡Gracias por contribuir a BiblioGestor!**
+¡Y listo! Ya deberías ver la pantalla de inicio de BiblioGestor. 
+Cualquier duda o cambio, creen una nueva rama (branch) para trabajar. ¡Éxitos!

@@ -33,10 +33,10 @@ def dashBoardPage(page: ft.Page):
         controls=[
             ft.Container(
                 bgcolor=ft.Colors.WHITE,
-                width=1280,
-                height=670,
+                expand=True,
                 content=ft.Row(
                     spacing=0,
+                    expand=True,
                     controls=[
                         userSideBar(
                             page,
@@ -48,15 +48,16 @@ def dashBoardPage(page: ft.Page):
                         ft.VerticalDivider(),
                         ft.Container(
                             width=1000,
-                            height=700,
+                            expand=True,
                             content=ft.Column(
                                 spacing=0,
+                                expand=True,
                                 controls=[
                                     soyAdminBtn(page),
                                     ft.Container(
                                         ref=main_body_ref,
                                         width=1000,
-                                        height=700,
+                                        expand=True,
                                         content=build_dashboard_main_body(page),
                                     ),
                                 ],
