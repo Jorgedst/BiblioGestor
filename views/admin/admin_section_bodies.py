@@ -579,7 +579,9 @@ def build_admin_libros(page: ft.Page) -> ft.Column:
         label="Estado",
         dense=True,
         border_radius=8,
-        options=[ft.DropdownOption(key=e, text=e) for e in _ESTADOS],
+        options=[ft.DropdownOption(key="Disponible", text="Disponible")],
+        value="Disponible",
+        disabled=True,
     )
 
     _ejemplar_fields = [tf_id_ejemplar, tf_isbn_ejemplar]
@@ -1490,8 +1492,16 @@ def build_admin_devoluciones(page: ft.Page) -> ft.Column:
 
     # ── Diálogo de rechazo ───────────────────────────────────────
     def _abrir_dialogo_rechazar(id_dev, titulo_libro, nombre_u):
+        dd_motivo = ft.Dropdown(
+            label="Motivo principal (obligatorio)",
+            options=[
+                ft.DropdownOption("Devolución incompleta o mal estado"),
+                ft.DropdownOption("El usuario no realizo la devolucion de un ejemplar")
+            ],
+            dense=True, border_radius=8,
+        )
         tf_observacion = ft.TextField(
-            label="Observación (obligatoria)",
+            label="Observación adicional (opcional)",
             multiline=True, min_lines=2, max_lines=4,
             dense=True, border_radius=8,
         )
@@ -1505,12 +1515,21 @@ def build_admin_devoluciones(page: ft.Page) -> ft.Column:
             page.update()
 
         def _confirmar(e):
-            obs = (tf_observacion.value or "").strip()
-            if not obs:
-                tf_observacion.error = "La observación es obligatoria"
+            motivo = dd_motivo.value
+            if not motivo:
+                dd_motivo.error = "Selecciona un motivo principal"
                 page.update()
                 return
-            ok, msg = rechazarDevolucion(id_dev, obs)
+            
+            dd_motivo.error = None
+            obs_adicional = (tf_observacion.value or "").strip()
+            obs_final = motivo
+            if obs_adicional:
+                obs_final += f" - {obs_adicional}"
+                
+            es_perdida = (motivo == "El usuario no realizo la devolucion de un ejemplar")
+
+            ok, msg = rechazarDevolucion(id_dev, obs_final, es_perdida=es_perdida)
             if ok:
                 _close()
                 _refrescar()
@@ -1536,6 +1555,7 @@ def build_admin_devoluciones(page: ft.Page) -> ft.Column:
                     f"Libro: {titulo_libro}\nUsuario: {nombre_u}",
                     size=13, color=ft.Colors.GREY_700,
                 ),
+                dd_motivo,
                 tf_observacion,
                 ft.Row(alignment=ft.MainAxisAlignment.END, spacing=8, controls=[
                     ft.OutlinedButton(

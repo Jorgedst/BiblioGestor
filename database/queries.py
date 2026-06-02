@@ -452,13 +452,22 @@ def obtenerUsuariosMasPrestamos():
     Columnas: codigoUsuario, nombreUsuario, totalPrestamos
     """
     query = """
-        SELECT p.codigoUsuario,
-               CONCAT(u.nombre, ' ', u.apellido) AS nombreUsuario,
-               COUNT(*) AS totalPrestamos
-        FROM prestamos p
-        INNER JOIN usuarios u ON u.codigo = p.codigoUsuario
-        GROUP BY p.codigoUsuario, u.nombre, u.apellido
-        ORDER BY totalPrestamos DESC
+        WITH Base AS (
+            SELECT DISTINCT p.codigoUsuario,
+                   CONCAT(u.nombre, ' ', u.apellido) AS nombreUsuario,
+                   COUNT(p.idPrestamo) OVER (PARTITION BY p.codigoUsuario) AS totalPrestamos
+            FROM prestamos p
+            INNER JOIN usuarios u ON u.codigo = p.codigoUsuario
+        ),
+        Rankeados AS (
+            SELECT codigoUsuario, nombreUsuario, totalPrestamos,
+                   DENSE_RANK() OVER (ORDER BY totalPrestamos DESC) as ranking
+            FROM Base
+        )
+        SELECT codigoUsuario, nombreUsuario, totalPrestamos
+        FROM Rankeados
+        WHERE ranking <= 10
+        ORDER BY ranking ASC, nombreUsuario ASC
         LIMIT 10
     """
     success, data = fetch_query(query)
@@ -473,11 +482,13 @@ def obtenerLibrosMasPrestados(fecha_desde=None, fecha_hasta=None):
     Columnas: isbn, titulo, autores, totalPrestamos
     """
     query = """
-        SELECT l.isbn, l.titulo, l.autores, COUNT(*) AS totalPrestamos
-        FROM prestamos p
-        INNER JOIN ejemplaresfisicos ef ON ef.idEjemplar = p.ejemplar
-        INNER JOIN libros l ON l.isbn = ef.codigoIsbn
-        WHERE 1=1
+        WITH Base AS (
+            SELECT DISTINCT l.isbn, l.titulo, l.autores,
+                   COUNT(p.idPrestamo) OVER (PARTITION BY l.isbn) AS totalPrestamos
+            FROM prestamos p
+            INNER JOIN ejemplaresfisicos ef ON ef.idEjemplar = p.ejemplar
+            INNER JOIN libros l ON l.isbn = ef.codigoIsbn
+            WHERE 1=1
     """
     values = []
     if fecha_desde:
@@ -486,7 +497,20 @@ def obtenerLibrosMasPrestados(fecha_desde=None, fecha_hasta=None):
     if fecha_hasta:
         query += " AND p.fechaPrestamo <= %s"
         values.append(fecha_hasta)
-    query += " GROUP BY l.isbn, l.titulo, l.autores ORDER BY totalPrestamos DESC LIMIT 10"
+        
+    query += """
+        ),
+        Rankeados AS (
+            SELECT isbn, titulo, autores, totalPrestamos,
+                   DENSE_RANK() OVER (ORDER BY totalPrestamos DESC) as ranking
+            FROM Base
+        )
+        SELECT isbn, titulo, autores, totalPrestamos
+        FROM Rankeados
+        WHERE ranking <= 10
+        ORDER BY ranking ASC, titulo ASC
+        LIMIT 10
+    """
     success, data = fetch_query(query, tuple(values) if values else None)
     if success:
         return data
@@ -634,15 +658,45 @@ def aprobarDevolucionAutomatica(id_devolucion, observaciones):
     return False, result
 
 
-def rechazarDevolucion(id_devolucion, observaciones):
+def rechazarDevolucion(id_devolucion, observaciones, es_perdida=False):
     """Rechaza una devolución con observación."""
     query = """UPDATE devoluciones
                SET estadoDevolucion = 'Rechazada', observaciones = %s
                WHERE idDevolucion = %s"""
     success, result = execute_query(query, (observaciones, id_devolucion))
+    
+    if success and es_perdida:
+        query_info = """
+            SELECT p.codigoUsuario, p.ejemplar 
+            FROM devoluciones d
+            INNER JOIN prestamos p ON p.idPrestamo = d.idPrestamo
+            WHERE d.idDevolucion = %s
+        """
+        success_info, data_info = fetch_query(query_info, (id_devolucion,))
+        if success_info and data_info:
+            usuario = data_info[0][0]
+            ejemplar_id = data_info[0][1]
+            execute_query("UPDATE ejemplaresfisicos SET estado = 'Perdido' WHERE idEjemplar = %s", (ejemplar_id,))
+            execute_query("UPDATE usuarios SET estado = 0 WHERE codigo = %s", (usuario,))
+            
     if success:
         return True, "Devolución rechazada"
     return False, result
+
+
+def obtenerMotivoBloqueo(codigo_usuario):
+    """Obtiene el último motivo de rechazo por pérdida para un usuario."""
+    query = """
+        SELECT d.observaciones
+        FROM devoluciones d
+        INNER JOIN prestamos p ON p.idPrestamo = d.idPrestamo
+        WHERE p.codigoUsuario = %s AND d.estadoDevolucion = 'Rechazada' AND d.observaciones LIKE '%El usuario no realizo la devolucion de un ejemplar%'
+        ORDER BY d.idDevolucion DESC LIMIT 1
+    """
+    success, data = fetch_query(query, (codigo_usuario,))
+    if success and data:
+        return data[0][0]
+    return "El usuario ha sido bloqueado por el administrador."
 
 
 def calcularTarifaTardiaDinámica(id_prestamo):
