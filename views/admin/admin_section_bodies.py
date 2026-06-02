@@ -1332,24 +1332,41 @@ def build_admin_prestamos(page: ft.Page) -> ft.Column:
 
 
 def build_admin_devoluciones(page: ft.Page) -> ft.Column:
-    """Lista de devoluciones con estados y diálogos de aprobación/rechazo."""
+    """Lista de devoluciones con estados y diálogos de aprobación/rechazo.
+
+    Usa `aprobarDevolucionAutomatica` que calcula internamente la multa
+    basada en la fechaVencimiento real del préstamo ($10.000/día de retraso).
+    """
     from database.queries import (
-        obtenerDevoluciones, aprobarDevolucion, rechazarDevolucion, calcularTarifaTardia,
+        obtenerDevoluciones, aprobarDevolucionAutomatica, rechazarDevolucion,
+        calcularTarifaTardiaDinámica,
     )
     from views.reusable.succesful import open_succesful_dialog
+
+    # Opciones predefinidas de observación para la aprobación
+    _OBS_OPCIONES = [
+        "Buen estado",
+        "Dañado",
+        "Páginas faltantes",
+    ]
 
     lista_devoluciones_col = ft.Column(spacing=6, scroll=ft.ScrollMode.AUTO, tight=True)
 
     # ── Diálogo de aprobación ────────────────────────────────────
-    def _abrir_dialogo_aprobar(id_dev, titulo_libro, nombre_u, fecha_prestamo):
-        tarifa = calcularTarifaTardia(fecha_prestamo)
+    def _abrir_dialogo_aprobar(id_dev, id_prestamo, titulo_libro, nombre_u):
+        # Calcular tarifa previa para mostrarla en el diálogo
+        tarifa = calcularTarifaTardiaDinámica(id_prestamo)
 
-        tf_observacion = ft.TextField(
-            label="Observación (obligatoria)",
-            multiline=True, min_lines=2, max_lines=4,
-            dense=True, border_radius=8,
+        # ── Dropdown de observaciones predefinidas ────────────────
+        dd_observacion = ft.Dropdown(
+            label="Estado del ejemplar (obligatorio)",
+            dense=True,
+            border_radius=8,
+            hint_text="Selecciona una opción...",
+            options=[ft.DropdownOption(key=o, text=o) for o in _OBS_OPCIONES],
         )
 
+        # ── Panel de tarifa calculada ─────────────────────────────
         tarifa_display = ft.Container(
             padding=ft.Padding(12, 10, 12, 10),
             border_radius=10,
@@ -1360,20 +1377,30 @@ def build_admin_devoluciones(page: ft.Page) -> ft.Column:
             content=ft.Column(
                 spacing=4,
                 controls=[
-                    ft.Text(
-                        "Tarifa por entrega tardía" if tarifa > 0 else "Entrega a tiempo",
-                        size=13, weight=ft.FontWeight.W_600,
-                        color=ft.Colors.RED_800 if tarifa > 0 else ft.Colors.GREEN_800,
+                    ft.Row(
+                        spacing=6,
+                        controls=[
+                            ft.Icon(
+                                ft.Icons.RECEIPT_LONG,
+                                size=16,
+                                color=ft.Colors.RED_700 if tarifa > 0 else ft.Colors.GREEN_700,
+                            ),
+                            ft.Text(
+                                "Multa por retraso" if tarifa > 0 else "Sin multa — entrega a tiempo",
+                                size=13, weight=ft.FontWeight.W_600,
+                                color=ft.Colors.RED_800 if tarifa > 0 else ft.Colors.GREEN_800,
+                            ),
+                        ],
                     ),
                     ft.Text(
-                        f"${tarifa:,.0f} COP" if tarifa > 0 else "$0 COP — Sin recargo",
-                        size=22, weight=ft.FontWeight.W_700,
+                        f"${tarifa:,.0f} COP" if tarifa > 0 else "$0 COP",
+                        size=24, weight=ft.FontWeight.W_700,
                         color=ft.Colors.RED_700 if tarifa > 0 else ft.Colors.GREEN_700,
                     ),
                     ft.Text(
-                        f"Sanción de $10,000 por cada día de retraso después de 15 días.",
+                        "$10.000 por cada día vencido después de la fecha límite.",
                         size=11, color=ft.Colors.GREY_600,
-                    ) if tarifa > 0 else ft.Container(),
+                    ) if tarifa > 0 else ft.Container(height=0),
                 ],
             ),
         )
@@ -1387,18 +1414,20 @@ def build_admin_devoluciones(page: ft.Page) -> ft.Column:
             page.update()
 
         def _confirmar(e):
-            obs = (tf_observacion.value or "").strip()
+            obs = dd_observacion.value
             if not obs:
-                tf_observacion.error = "La observación es obligatoria"
+                dd_observacion.error = "Debes seleccionar el estado del ejemplar"
                 page.update()
                 return
-            ok, msg = aprobarDevolucion(id_dev, obs, tarifa)
+            dd_observacion.error = None
+            # aprobarDevolucionAutomatica calcula la multa internamente
+            ok, msg = aprobarDevolucionAutomatica(id_dev, obs)
             if ok:
                 _close()
                 _refrescar()
-                open_succesful_dialog(page, f"Devolución #{id_dev} aprobada correctamente.")
+                open_succesful_dialog(page, msg)  # msg incluye el valor de la multa
             else:
-                tf_observacion.error = f"Error: {msg}"
+                dd_observacion.error = f"Error: {msg}"
                 page.update()
 
         modal = ft.Container(
@@ -1419,7 +1448,7 @@ def build_admin_devoluciones(page: ft.Page) -> ft.Column:
                     size=13, color=ft.Colors.GREY_700,
                 ),
                 tarifa_display,
-                tf_observacion,
+                dd_observacion,
                 ft.Row(alignment=ft.MainAxisAlignment.END, spacing=8, controls=[
                     ft.OutlinedButton(
                         content="Cancelar", on_click=_close,
@@ -1617,8 +1646,8 @@ def build_admin_devoluciones(page: ft.Page) -> ft.Column:
             # Botones según estado
             botones_accion = []
             if estado == "En solicitud":
-                def _make_aprobar(idv, t, n, fp):
-                    return lambda e: _abrir_dialogo_aprobar(idv, t, n, fp)
+                def _make_aprobar(idv, ip, t, n):
+                    return lambda e: _abrir_dialogo_aprobar(idv, ip, t, n)
 
                 def _make_rechazar(idv, t, n):
                     return lambda e: _abrir_dialogo_rechazar(idv, t, n)
@@ -1626,7 +1655,7 @@ def build_admin_devoluciones(page: ft.Page) -> ft.Column:
                 botones_accion = [
                     ft.FilledButton(
                         content="Aprobar", width=100, height=32,
-                        on_click=_make_aprobar(id_dev, titulo, nombre_u, fecha_prest),
+                        on_click=_make_aprobar(id_dev, id_prest, titulo, nombre_u),
                         style=ft.ButtonStyle(
                             bgcolor=ft.Colors.GREEN_600, color=ft.Colors.WHITE,
                             shape=ft.RoundedRectangleBorder(radius=8),

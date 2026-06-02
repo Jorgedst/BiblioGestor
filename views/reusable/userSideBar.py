@@ -7,6 +7,7 @@ def userSideBar(
     on_devolver_libro=None,
     on_historial=None,
     on_editar_perfil=None,
+    on_notificaciones=None,
 ):
     async def ir_inicio(e):
         if on_inicio is not None:
@@ -30,6 +31,10 @@ def userSideBar(
             await on_editar_perfil(e)
         else:
             await page.push_route("/editarPerfil")
+
+    async def irNotificaciones(e):
+        if on_notificaciones is not None:
+            await on_notificaciones(e)
 
     return ft.Container(
         width=230,
@@ -200,6 +205,45 @@ def userSideBar(
                         )
                     ),
 
+                ])
+            ),
+            # Botón Notificaciones
+            ft.Container(
+                content=ft.Text(
+                    "Notificaciones",
+                    size=15,
+                    color=ft.Colors.BLACK,
+                    weight=ft.FontWeight.BOLD,
+                ),
+                margin=ft.Margin(10, 5, 0, 0),
+            ),
+            ft.Container(
+                margin=ft.Margin(8, 0, 0, 0),
+                border_radius=10,
+                bgcolor=ft.Colors.WHITE_54,
+                content=ft.Row(controls=[
+                    ft.Icon(ft.Icons.NOTIFICATIONS_OUTLINED,
+                            color=ft.Colors.BLACK,
+                            align=ft.Alignment.CENTER_LEFT,
+                            ),
+                    ft.Button(
+                        width=190,
+                        content="Mis notificaciones",
+                        on_click=irNotificaciones,
+                        style=ft.ButtonStyle(
+                            color={
+                                ft.ControlState.DEFAULT: ft.Colors.BLACK,
+                            },
+                            bgcolor={
+                                ft.ControlState.DEFAULT: ft.Colors.WHITE,
+                            },
+                            shape=ft.ContinuousRectangleBorder(),
+                            mouse_cursor=ft.MouseCursor.CLICK,
+                            padding=ft.Padding(0),
+                            shadow_color=ft.Colors.TRANSPARENT,
+                            alignment=ft.Alignment.CENTER_LEFT,
+                        )
+                    ),
                 ])
             ),
             #Boton de salir

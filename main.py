@@ -1,4 +1,5 @@
 import flet as ft
+import threading
 from views.login_Page import login_page
 from views.register_Page import register_Page
 from views.user.userDashboard_Page import dashBoardPage
@@ -33,6 +34,17 @@ def main(page: ft.Page):
             page.views.append(register_Page(page))
         elif page.route == "/userDashboard":
             page.views.append(dashBoardPage(page))
+            # ── Generar alertas de vencimiento en segundo plano ────────────
+            # Se ejecuta en un hilo daemon para no congelar la interfaz.
+            # Las notificaciones quedan guardadas en la BD y el usuario
+            # las verá al abrir el panel de notificaciones.
+            def _generar_alertas():
+                try:
+                    from database.queries import procesar_y_guardar_notificaciones_automaticas
+                    procesar_y_guardar_notificaciones_automaticas()
+                except Exception as ex:
+                    print(f"[BiblioGestor] Error generando alertas: {ex}")
+            threading.Thread(target=_generar_alertas, daemon=True).start()
         elif page.route == "/loginAdmin":
             page.views.append(loginAdmin(page))
         elif page.route == "/dashboardAdmin":

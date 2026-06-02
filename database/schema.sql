@@ -76,3 +76,14 @@ CREATE TABLE IF NOT EXISTS `reservas` (
     CONSTRAINT `fk_reservas_usuarios` FOREIGN KEY (`codigoUsuario`) REFERENCES `usuarios` (`codigo`) ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT `fk_reservas_ejemplares` FOREIGN KEY (`idEjemplar`) REFERENCES `ejemplaresfisicos` (`idEjemplar`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 7. Tabla: notificaciones
+CREATE TABLE IF NOT EXISTS `notificaciones` (
+    `idNotificacion` INT NOT NULL AUTO_INCREMENT,
+    `codigoUsuario` INT NOT NULL,
+    `mensaje` TEXT NOT NULL,
+    `fechaEnvio` DATETIME NOT NULL,
+    `leido` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '0 = No leído, 1 = Leído',
+    PRIMARY KEY (`idNotificacion`),
+    CONSTRAINT `fk_notificaciones_usuarios` FOREIGN KEY (`codigoUsuario`) REFERENCES `usuarios` (`codigo`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

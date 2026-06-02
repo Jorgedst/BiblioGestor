@@ -567,26 +567,40 @@ def registrarDevolucion(id_devolucion, id_prestamo, observaciones=""):
     return False, result
 
 
-def aprobarDevolucion(id_devolucion, observaciones, tarifa):
-    """Aprueba una devolución: guarda observación + tarifa y libera el ejemplar."""
-    # Obtener el ejemplar del préstamo para liberarlo
+def aprobarDevolucionAutomatica(id_devolucion, observaciones):
+    """Aprueba la devolución calculando internamente la multa y liberando el ejemplar."""
+    # 1. Obtener el idPrestamo asociado a esta devolución
+    query_prestamo = "SELECT idPrestamo FROM devoluciones WHERE idDevolucion = %s"
+    success_p, p_data = fetch_query(query_prestamo, (id_devolucion,))
+    
+    if not success_p or not p_data:
+        return False, "No se encontró el préstamo asociado a la devolución."
+        
+    id_prestamo = p_data[0][0]
+    
+    # 2. Calcular la multa real basada en los días de retraso
+    tarifa_calculada = calcularTarifaTardiaDinámica(id_prestamo)
+
+    # 3. Obtener y liberar el ejemplar físico
     query_ej = """
         SELECT p.ejemplar FROM devoluciones d
         INNER JOIN prestamos p ON p.idPrestamo = d.idPrestamo
         WHERE d.idDevolucion = %s
     """
-    success, data = fetch_query(query_ej, (id_devolucion,))
-    if success and data:
-        ejemplar_id = data[0][0]
+    success_ej, data_ej = fetch_query(query_ej, (id_devolucion,))
+    if success_ej and data_ej:
+        ejemplar_id = data_ej[0][0]
         actualizarEstadoEjemplar(ejemplar_id, "Disponible")
-        completarReserva(ejemplar_id)
+        completarReserva(ejemplar_id)  # Si alguien lo tenía reservado, procesa la cola
 
-    query = """UPDATE devoluciones
-               SET estadoDevolucion = 'Aprobada', observaciones = %s, tarifaCobro = %s
-               WHERE idDevolucion = %s"""
-    success, result = execute_query(query, (observaciones, tarifa, id_devolucion))
+    # 4. Actualizar la tabla de devoluciones
+    query_update = """UPDATE devoluciones
+                      SET estadoDevolucion = 'Aprobada', observaciones = %s, tarifaCobro = %s
+                      WHERE idDevolucion = %s"""
+    success, result = execute_query(query_update, (observaciones, tarifa_calculada, id_devolucion))
+    
     if success:
-        return True, "Devolución aprobada"
+        return True, f"Devolución aprobada con éxito. Multa total: ${tarifa_calculada:,}"
     return False, result
 
 
@@ -601,16 +615,21 @@ def rechazarDevolucion(id_devolucion, observaciones):
     return False, result
 
 
-def calcularTarifaTardia(fecha_prestamo):
-    """Calcula la tarifa por entrega tardía ($10,000/día después de 15 días)."""
+def calcularTarifaTardiaDinámica(id_prestamo):
+    """Calcula la tarifa por entrega tardía ($10.000/día) basada en la fechaVencimiento real."""
     import datetime
-    if not fecha_prestamo:
-        return 0
-    if isinstance(fecha_prestamo, str):
-        fecha_prestamo = datetime.datetime.strptime(fecha_prestamo, "%Y-%m-%d %H:%M:%S")
-    dias = (datetime.datetime.now() - fecha_prestamo).days
-    if dias > 15:
-        return (dias - 15) * 10000
+    query = "SELECT fechaVencimiento FROM prestamos WHERE idPrestamo = %s"
+    success, data = fetch_query(query, (id_prestamo,))
+    
+    if success and data and data[0][0]:
+        fecha_vencimiento = data[0][0]
+        if isinstance(fecha_vencimiento, str):
+            fecha_vencimiento = datetime.datetime.strptime(fecha_vencimiento, "%Y-%m-%d %H:%M:%S")
+            
+        ahora = datetime.datetime.now()
+        if ahora > fecha_vencimiento:
+            dias_retraso = (ahora - fecha_vencimiento).days
+            return dias_retraso * 10000
     return 0
 
 
@@ -661,10 +680,56 @@ def obtenerEjemplaresNoDisponibles(isbn):
 
 
 def registrarReserva(codigo_usuario, id_ejemplar):
-    """Registra una reserva activa de un ejemplar para un usuario."""
+    """
+    Registra una reserva activa de un ejemplar para un usuario.
+    
+    Validaciones:
+    1. Verifica que el usuario exista y esté activo.
+    2. Consulta el estado del ejemplar. Si es 'Disponible', no reserva.
+    3. Verifica que no tenga reserva activa para este mismo ejemplar.
+    """
     import datetime
+    
+    # ── 1. Validar que el usuario exista y esté activo ───────────
+    ok_u, usuario = fetch_query(
+        "SELECT codigo, estado FROM usuarios WHERE codigo = %s",
+        (codigo_usuario,)
+    )
+    if not ok_u or not usuario:
+        return False, f"No se encontró el usuario con código '{codigo_usuario}'."
+    if usuario[0][1] != 1:
+        return False, "El usuario no está activo en el sistema."
+
+    # ── 2. Validar que el ejemplar exista ────────────────────────
+    ok_e, ejemplar = fetch_query(
+        "SELECT idEjemplar, estado FROM ejemplaresfisicos WHERE idEjemplar = %s",
+        (id_ejemplar,)
+    )
+    if not ok_e or not ejemplar:
+        return False, f"No se encontró el ejemplar con ID '{id_ejemplar}'."
+
+    estado_ejemplar = ejemplar[0][1]
+
+    # ── 3. Si está Disponible: no se reserva, se presta directo ──
+    if estado_ejemplar == "Disponible":
+        return False, (
+            f"El ejemplar '{id_ejemplar}' está DISPONIBLE en este momento. "
+            "No es necesario hacer una reserva; solicite el préstamo directamente."
+        )
+
+    # ── 4. Verificar que no exista ya una reserva activa igual ───
+    ok_r, reserva_existente = fetch_query(
+        "SELECT idReserva FROM reservas "
+        "WHERE codigoUsuario = %s AND idEjemplar = %s AND estadoReserva = 'Activa'",
+        (codigo_usuario, id_ejemplar)
+    )
+    if ok_r and reserva_existente:
+        return False, "Ya existe una reserva activa para este usuario y ejemplar."
+
+    # ── 5. Registrar la reserva ──────────────────────────────────
+    ahora = datetime.datetime.now()
     query = "INSERT INTO reservas (codigoUsuario, idEjemplar, fechaReserva, estadoReserva) VALUES (%s, %s, %s, 'Activa')"
-    success, result = execute_query(query, (codigo_usuario, id_ejemplar, datetime.datetime.now()))
+    success, result = execute_query(query, (codigo_usuario, id_ejemplar, ahora))
     if success:
         return True, "Reserva registrada con éxito."
     return False, result
@@ -762,3 +827,52 @@ def obtenerPrestamosProximosVencerGeneral():
         return data
     return []
 
+def procesar_y_guardar_notificaciones_automaticas():
+    """Busca préstamos que vencen pronto y los registra en la tabla de notificaciones si no existen para el día actual."""
+    import datetime
+    prestamos_proximos = obtenerPrestamosProximosVencerGeneral()
+    
+    for p in prestamos_proximos:
+        id_prestamo, _, ejemplar, fecha_venc, titulo = p
+        
+        query_user = "SELECT codigoUsuario FROM prestamos WHERE idPrestamo = %s"
+        _, u_data = fetch_query(query_user, (id_prestamo,))
+        
+        if u_data:
+            codigo_usuario = u_data[0][0]
+            
+            ahora = datetime.datetime.now()
+            if isinstance(fecha_venc, datetime.date) and not isinstance(fecha_venc, datetime.datetime):
+                fecha_venc = datetime.datetime.combine(fecha_venc, datetime.time.min)
+                
+            dias_restantes = max(0, (fecha_venc - ahora).days)
+            fecha_formateada = fecha_venc.strftime("%d/%m/%Y")
+            
+            if dias_restantes == 0:
+                aviso = "¡HOLA! Tu préstamo vence HOY"
+            elif dias_restantes == 1:
+                aviso = "Tu préstamo vence MAÑANA"
+            else:
+                aviso = f"Tu préstamo vence en {dias_restantes} días"
+
+            mensaje = (
+                f"⚠️ Alerta de vencimiento: {aviso}. "
+                f"Libro: '{titulo}' (ejemplar {ejemplar}), "
+                f"préstamo #{id_prestamo}. "
+                f"Fecha límite: {fecha_formateada}. "
+                "Por favor, devuélvelo a tiempo para evitar cargos adicionales."
+            )
+            
+            # Evitar duplicar la misma notificación en el mismo día
+            query_check = """
+                SELECT idNotificacion FROM notificaciones 
+                WHERE codigoUsuario = %s 
+                  AND mensaje LIKE %s 
+                  AND DATE(fechaEnvio) = CURDATE()
+            """
+            _, existe = fetch_query(query_check, (codigo_usuario, f"%préstamo #{id_prestamo}%"))
+            
+            if not existe:
+                query_ins = "INSERT INTO notificaciones (codigoUsuario, mensaje, fechaEnvio, leido) VALUES (%s, %s, %s, 0)"
+                execute_query(query_ins, (codigo_usuario, mensaje, ahora))
+    return True

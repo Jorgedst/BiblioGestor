@@ -5,6 +5,7 @@ from views.user.dashboard import build_dashboard_main_body
 from views.user.devolver_libro import devolver_libro_body_after_sidebar
 from views.user.historial import historial_body_after_sidebar
 from views.user.editarPerfil import editar_perfil_body_after_sidebar
+from views.user.notificaciones import build_notificaciones_panel
 
 
 def dashBoardPage(page: ft.Page):
@@ -25,6 +26,8 @@ def dashBoardPage(page: ft.Page):
         _mostrar_cuerpo(historial_body_after_sidebar(page))
     async def abrir_editar_perfil(e):
         _mostrar_cuerpo(editar_perfil_body_after_sidebar(page))
+    async def abrir_notificaciones(e):
+        _mostrar_cuerpo(build_notificaciones_panel(page))
 
     return ft.View(
         route="/userDashboard",
@@ -44,6 +47,7 @@ def dashBoardPage(page: ft.Page):
                             on_devolver_libro=abrir_devolver_libro,
                             on_historial=abrir_historial,
                             on_editar_perfil=abrir_editar_perfil,
+                            on_notificaciones=abrir_notificaciones,
                         ),
                         ft.VerticalDivider(),
                         ft.Container(

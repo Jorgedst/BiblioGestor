@@ -12,7 +12,7 @@ from database.queries import (
 from views.reusable.succesful import open_succesful_dialog
 
 # Máximo de días de préstamo
-_DIAS_PRESTAMO = 15
+_DIAS_PRESTAMO = 8
 
 
 def _open_error_dialog(page: ft.Page, mensaje: str, isbn: str = None):
