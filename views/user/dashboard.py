@@ -1,7 +1,7 @@
 import flet as ft
 from database.queries import (
     obtenerUsuarioInfo, obtenerCategorias, obtenerLibrosFiltrados,
-    obtenerPrestamosProximosVencerUsuario, obtenerReservasUsuario, cancelarReserva
+    obtenerReservasUsuario, cancelarReserva, obtenerNotificacionesNoLeidas
 )
 from views.reusable.btnesCategoria import botonesCategoria
 from views.user.prestar_dialog import open_prestar_dialog
@@ -218,45 +218,84 @@ def build_dashboard_main_body(page: ft.Page) -> ft.Column:
             btns.append(botonesCategoria(cat, seleccionado=es_sel, on_click=_on_cat_click))
         return btns
 
-    # ── Construir banner de notificaciones de devolución próxima ────────────────
+    # ── Construir banner de notificaciones (Nuevas) ────────────────
     def _construir_notificaciones() -> ft.Control:
-        proximos = obtenerPrestamosProximosVencerUsuario(codigoSesionUsuario) if codigoSesionUsuario else []
-        if not proximos:
+        notifs = obtenerNotificacionesNoLeidas(codigoSesionUsuario) if codigoSesionUsuario else []
+        if not notifs:
             return ft.Container() # Ocultar si no hay alertas
+        
+        # Mostrar solo las 3 más recientes en el dashboard para no saturar
+        notifs_mostrar = notifs[:3]
 
         notif_items = []
-        for p in proximos:
-            # p: (idPrestamo, ejemplar, fechaVencimiento, titulo, autores)
-            fecha_v = p[2].strftime("%d/%m/%Y") if hasattr(p[2], "strftime") else str(p[2])
+        for n in notifs_mostrar:
+            # n: (idNotificacion, mensaje, fechaEnvio)
+            mensaje = n[1]
+            fecha_v = n[2].strftime("%d/%m/%Y %H:%M") if hasattr(n[2], "strftime") else str(n[2])
+            
+            # Asignar un icono/color según el mensaje
+            if "⚠️" in mensaje or "vence" in mensaje.lower() or "atención" in mensaje.lower():
+                color_bg = ft.Colors.AMBER_50
+                color_border = ft.Colors.AMBER_300
+                color_icon = ft.Colors.AMBER_800
+                icon_val = ft.Icons.WARNING_ROUNDED
+            elif "✅" in mensaje or "aprobada" in mensaje.lower() or "🔔" in mensaje or "disponible" in mensaje.lower():
+                color_bg = ft.Colors.GREEN_50
+                color_border = ft.Colors.GREEN_300
+                color_icon = ft.Colors.GREEN_800
+                icon_val = ft.Icons.CHECK_CIRCLE
+            elif "❌" in mensaje or "rechazada" in mensaje.lower():
+                color_bg = ft.Colors.RED_50
+                color_border = ft.Colors.RED_300
+                color_icon = ft.Colors.RED_800
+                icon_val = ft.Icons.CANCEL
+            else:
+                color_bg = ft.Colors.BLUE_50
+                color_border = ft.Colors.BLUE_300
+                color_icon = ft.Colors.BLUE_800
+                icon_val = ft.Icons.NOTIFICATIONS_ACTIVE
+                
             notif_items.append(
-                ft.Row(
-                    spacing=10,
-                    controls=[
-                        ft.Icon(ft.Icons.WARNING_ROUNDED, color=ft.Colors.AMBER_800, size=16),
-                        ft.Text(
-                            f"El libro \"{p[3]}\" vence el {fecha_v} (Ej. #{p[1]}).",
-                            size=12,
-                            weight=ft.FontWeight.W_500,
-                            color=ft.Colors.AMBER_900,
-                        )
-                    ]
+                ft.Container(
+                    padding=ft.Padding(10, 8, 10, 8),
+                    bgcolor=color_bg,
+                    border=ft.Border.all(1, color_border),
+                    border_radius=6,
+                    content=ft.Row(
+                        spacing=10,
+                        controls=[
+                            ft.Icon(icon_val, color=color_icon, size=20),
+                            ft.Column(
+                                spacing=2,
+                                controls=[
+                                    ft.Text(
+                                        mensaje,
+                                        size=12,
+                                        weight=ft.FontWeight.W_500,
+                                        color=ft.Colors.GREY_900,
+                                    ),
+                                    ft.Text(
+                                        fecha_v,
+                                        size=10,
+                                        color=ft.Colors.GREY_600,
+                                    )
+                                ]
+                            )
+                        ]
+                    )
                 )
             )
 
         return ft.Container(
             margin=ft.Margin(15, 10, 15, 10),
-            padding=ft.Padding(12, 10, 12, 10),
-            bgcolor=ft.Colors.AMBER_50,
-            border=ft.Border.all(1, ft.Colors.AMBER_300),
-            border_radius=8,
             content=ft.Column(
                 spacing=5,
                 controls=[
                     ft.Text(
-                        "¡Atención! Tienes devoluciones próximas:",
+                        f"Tienes {len(notifs)} notificación(es) nueva(s):" if len(notifs) > 1 else "Tienes 1 notificación nueva:",
                         size=13,
                         weight=ft.FontWeight.W_700,
-                        color=ft.Colors.AMBER_900,
+                        color=ft.Colors.GREY_800,
                     ),
                     *notif_items
                 ]

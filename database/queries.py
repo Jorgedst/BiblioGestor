@@ -519,23 +519,53 @@ def obtenerPrestamosRecientes():
 
 
 def aprobarPrestamo(id_prestamo):
-    """Aprueba un préstamo: cambia estado a 'Aprobada'."""
+    """Aprueba un préstamo: cambia estado a 'Aprobada' y notifica al usuario."""
     query = "UPDATE prestamos SET estadoPrestamo = 'Aprobada' WHERE idPrestamo = %s"
     success, result = execute_query(query, (id_prestamo,))
     if success:
+        import datetime
+        query_info = """
+            SELECT p.codigoUsuario, l.titulo 
+            FROM prestamos p
+            INNER JOIN ejemplaresfisicos ef ON ef.idEjemplar = p.ejemplar
+            INNER JOIN libros l ON l.isbn = ef.codigoIsbn
+            WHERE p.idPrestamo = %s
+        """
+        success_info, data_info = fetch_query(query_info, (id_prestamo,))
+        if success_info and data_info:
+            usuario = data_info[0][0]
+            titulo = data_info[0][1]
+            mensaje = f"✅ Tu solicitud de préstamo para '{titulo}' ha sido APROBADA. ¡Puedes pasar a recoger tu ejemplar!"
+            query_ins = "INSERT INTO notificaciones (codigoUsuario, mensaje, fechaEnvio, leido) VALUES (%s, %s, %s, 0)"
+            execute_query(query_ins, (usuario, mensaje, datetime.datetime.now()))
         return True, "Préstamo aprobado"
     return False, result
 
 
 def rechazarPrestamo(id_prestamo):
     """
-    Rechaza un préstamo: cambia estado a 'Rechazada' y libera el ejemplar.
+    Rechaza un préstamo: cambia estado a 'Rechazada', libera el ejemplar y notifica al usuario.
     """
-    query_ej = "SELECT ejemplar FROM prestamos WHERE idPrestamo = %s"
-    success, data = fetch_query(query_ej, (id_prestamo,))
-    if success and data:
-        ejemplar_id = data[0][0]
+    query_info = """
+        SELECT p.codigoUsuario, l.titulo, p.ejemplar 
+        FROM prestamos p
+        INNER JOIN ejemplaresfisicos ef ON ef.idEjemplar = p.ejemplar
+        INNER JOIN libros l ON l.isbn = ef.codigoIsbn
+        WHERE p.idPrestamo = %s
+    """
+    success_info, data_info = fetch_query(query_info, (id_prestamo,))
+    
+    if success_info and data_info:
+        usuario = data_info[0][0]
+        titulo = data_info[0][1]
+        ejemplar_id = data_info[0][2]
+        
         actualizarEstadoEjemplar(ejemplar_id, "Disponible")
+        
+        import datetime
+        mensaje = f"❌ Tu solicitud de préstamo para '{titulo}' ha sido RECHAZADA. El ejemplar ha sido liberado."
+        query_ins = "INSERT INTO notificaciones (codigoUsuario, mensaje, fechaEnvio, leido) VALUES (%s, %s, %s, 0)"
+        execute_query(query_ins, (usuario, mensaje, datetime.datetime.now()))
 
     query = "UPDATE prestamos SET estadoPrestamo = 'Rechazada' WHERE idPrestamo = %s"
     success, result = execute_query(query, (id_prestamo,))
@@ -770,13 +800,29 @@ def cancelarReserva(id_reserva):
 
 
 def completarReserva(id_ejemplar):
-    """Marca la reserva activa más antigua de un ejemplar como completada."""
-    query_find = "SELECT idReserva FROM reservas WHERE idEjemplar = %s AND estadoReserva = 'Activa' ORDER BY fechaReserva ASC LIMIT 1"
+    """Marca la reserva activa más antigua de un ejemplar como completada y notifica al usuario."""
+    query_find = """
+        SELECT r.idReserva, r.codigoUsuario, l.titulo 
+        FROM reservas r
+        INNER JOIN ejemplaresfisicos ef ON ef.idEjemplar = r.idEjemplar
+        INNER JOIN libros l ON l.isbn = ef.codigoIsbn
+        WHERE r.idEjemplar = %s AND r.estadoReserva = 'Activa' 
+        ORDER BY r.fechaReserva ASC LIMIT 1
+    """
     success, data = fetch_query(query_find, (id_ejemplar,))
     if success and data:
         id_reserva = data[0][0]
+        usuario = data[0][1]
+        titulo = data[0][2]
+        
         query_upd = "UPDATE reservas SET estadoReserva = 'Completada' WHERE idReserva = %s"
         execute_query(query_upd, (id_reserva,))
+        
+        import datetime
+        mensaje = f"🔔 ¡Tu reserva está disponible! El libro '{titulo}' (ejemplar {id_ejemplar}) ha sido devuelto y está listo para que lo solicites."
+        query_ins = "INSERT INTO notificaciones (codigoUsuario, mensaje, fechaEnvio, leido) VALUES (%s, %s, %s, 0)"
+        execute_query(query_ins, (usuario, mensaje, datetime.datetime.now()))
+        
         return True
     return False
 
@@ -876,3 +922,16 @@ def procesar_y_guardar_notificaciones_automaticas():
                 query_ins = "INSERT INTO notificaciones (codigoUsuario, mensaje, fechaEnvio, leido) VALUES (%s, %s, %s, 0)"
                 execute_query(query_ins, (codigo_usuario, mensaje, ahora))
     return True
+
+def obtenerNotificacionesNoLeidas(codigo_usuario):
+    """Obtiene las notificaciones no leídas de un usuario, ordenadas por fecha."""
+    query = """
+        SELECT idNotificacion, mensaje, fechaEnvio 
+        FROM notificaciones 
+        WHERE codigoUsuario = %s AND leido = 0 
+        ORDER BY fechaEnvio DESC
+    """
+    success, data = fetch_query(query, (codigo_usuario,))
+    if success:
+        return data
+    return []
